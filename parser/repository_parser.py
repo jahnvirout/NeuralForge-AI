@@ -9,6 +9,10 @@ SUPPORTED_EXTENSIONS = {
     ".ts": "TypeScript"
 }
 
+IGNORED_DIRS = {".git", "node_modules", "venv", "__pycache__", ".pytest_cache"}
+
+MAX_FILE_SIZE = 500_000  # ~500KB
+
 
 def parse_repository(repo_path):
 
@@ -18,14 +22,20 @@ def parse_repository(repo_path):
 
     for file in repo.rglob("*"):
 
+        if any(part in IGNORED_DIRS for part in file.parts):
+            continue
+
         if not file.is_file():
             continue
 
         if file.suffix not in SUPPORTED_EXTENSIONS:
             continue
 
-        try:
+        if file.stat().st_size > MAX_FILE_SIZE:
+            print(f"Skipping {file}: too large ({file.stat().st_size} bytes)")
+            continue
 
+        try:
             with open(file, "r", encoding="utf-8") as f:
                 code = f.read()
 
@@ -38,8 +48,13 @@ def parse_repository(repo_path):
                 }
             )
 
+        except UnicodeDecodeError:
+            print(f"Skipping {file}: not UTF-8 encoded")
+            continue
+
         except Exception as e:
             print(f"Error reading {file}: {e}")
+            continue
 
     return repository_data
 
@@ -55,6 +70,3 @@ if __name__ == "__main__":
     for file in files:
 
         print("=" * 50)
-        print("File:", file["relative_path"])
-        print("Language:", file["language"])
-        print("Characters:", len(file["code"]))
