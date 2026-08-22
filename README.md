@@ -2,15 +2,13 @@
 
 AI Copilot for Machine Learning Repositories
 
-NeuralForge AI is an AI-powered copilot designed to understand machine learning codebases instead of just reading documents. It combines Retrieval-Augmented Generation (RAG), semantic code retrieval, and Large Language Models (LLMs) to answer repository-specific questions, explain code, and help developers navigate ML repositories.
-
-The long-term vision is an intelligent ML Engineer copilot capable of reviewing machine learning pipelines, detecting common implementation issues, and providing engineering-level recommendations grounded in the actual source code.
+NeuralForge AI is an AI-powered copilot designed to understand machine learning codebases instead of just reading documents. It combines Retrieval-Augmented Generation (RAG), semantic code retrieval, and Large Language Models (LLMs) to answer repository-specific questions, explain code, and help developers navigate ML repositories. On top of that, it reasons like an ML engineer — auditing repositories for common implementation mistakes like data leakage, missing validation, and unconstrained hyperparameters.
 
 ## Motivation
 
-Modern LLMs answer general programming questions well but lack awareness of an entire codebase. Developers often spend significant time understanding unfamiliar repositories before making changes.
+Modern LLMs answer general programming questions well but lack awareness of an entire codebase. Developers often spend significant time understanding unfamiliar repositories before making changes, and generic AI chatbots can't catch ML-specific engineering mistakes that require domain judgment, not just code-reading.
 
-NeuralForge AI bridges this gap by indexing a repository, understanding its structure, retrieving the most relevant code, and generating context-aware responses grounded in the actual project — rather than acting as a generic chatbot.
+NeuralForge AI bridges this gap in two ways: by indexing a repository and answering questions grounded in the actual code, and by running static analysis checks that flag real ML engineering pitfalls — turning "chat with your repo" into something closer to an automated ML code review.
 
 ## Features
 
@@ -31,16 +29,30 @@ NeuralForge AI bridges this gap by indexing a repository, understanding its stru
 
 ### Retrieval-Augmented Generation (RAG)
 - Retrieves relevant code context for a user's question
-- Builds a grounded prompt (explicitly restricts the LLM to the retrieved context)
+- Builds a grounded prompt (explicitly restricts the LLM to the retrieved context, preventing hallucination)
 - Calls Groq (openai/gpt-oss-20b) to generate an answer
-- Answers repository-specific questions, explains functions/classes, and reasons over the retrieved code
+- Answers repository-specific questions and explains functions/classes using only retrieved code
 
-### ML Engineer Intelligence (Phase 2, in progress)
-- Data leakage detection — flags scaling/encoding applied before train-test split
-- Overfitting risk analysis — flags models trained without evaluation against a held-out set
-- Project scoring — aggregates checks into a single weighted score with a detailed issue breakdown
+### ML Engineer Intelligence (Phase 2)
+- **Data leakage detection** — flags `fit_transform()` called before `train_test_split()`
+- **Overfitting risk analysis** — flags models trained with `.fit()` but never evaluated against a held-out validation/test set
+- **Hyperparameter risk analysis** — flags tree-based models (DecisionTree/RandomForest) initialized without `max_depth`, risking unbounded overfitting
+- **Project scoring** — aggregates all checks into a single weighted score (out of 100) with a detailed issue breakdown
+- **ML Project Health Report generator** — produces a full Markdown report combining chunk stats and all findings, downloadable from the frontend
 
-Planned: hyperparameter analysis, auto-generated ML-specific documentation, repository health reports.
+### Backend API (FastAPI)
+The entire pipeline is exposed as a REST API, not just terminal scripts:
+- `POST /upload-repo` — parses, chunks, embeds, and indexes a repository
+- `POST /ask` — answers a question grounded in the indexed repository
+- `POST /analyze` — runs Phase 2 checks and returns the score/issue report
+- `POST /report` — generates the full Markdown health report
+
+### Frontend (Streamlit)
+A clean, minimal dashboard with four views:
+- **Copilot Q&A** — chat interface for asking questions about the codebase
+- **ML Health Dashboard** — visual score and itemized issue breakdown
+- **Full ML Report** — rendered report with one-click Markdown download
+- **Repo Inspector** — pipeline architecture and live session telemetry
 
 ## Architecture
 
@@ -57,9 +69,15 @@ FAISS Vector Database
     |
 Retriever
     |
-LLM (Groq)
-    |
-Context-Aware Response
+LLM (Groq) ---- ML Intelligence Checks (Phase 2)
+    |                    |
+Context-Aware Response   Score + Issue Report
+    |                    |
+    +--------------------+
+             |
+      FastAPI Backend
+             |
+      Streamlit Frontend
 ```
 
 ## Tech Stack
@@ -70,7 +88,11 @@ Context-Aware Response
 
 **RAG/LLM:** LangChain, Groq API
 
-**Testing:** pytest
+**Backend:** FastAPI, uvicorn
+
+**Frontend:** Streamlit
+
+**Testing:** pytest (unit tests for parser/chunker, integration tests for live API endpoints)
 
 ## Project Structure
 
@@ -83,8 +105,10 @@ NeuralForge-AI/
 ├── retrieval/         # semantic retrieval logic
 ├── llm/            # RAG chain, Groq integration
 ├── evaluation/         # Phase 2 ML intelligence checks
-├── rag/            # end-to-end pipeline entry point
-├── tests/            # pytest test suite
+├── backend/          # FastAPI app exposing the pipeline as a REST API
+├── frontend/          # Streamlit dashboard
+├── rag/            # end-to-end pipeline entry point (terminal)
+├── tests/            # pytest unit + integration test suite
 ├── data/            # sample repositories for testing
 └── docs/
 ```
@@ -104,14 +128,28 @@ Create a `.env` file in the project root:
 GROQ_API_KEY=your_key_here
 ```
 
-Run the end-to-end pipeline:
+**Run the full app (backend + frontend):**
+
+Terminal 1:
+```bash
+uvicorn backend.main:app --reload --port 8000
+```
+
+Terminal 2:
+```bash
+streamlit run frontend/app.py
+```
+
+Open `http://localhost:8501` in your browser.
+
+**Or run the terminal-only end-to-end pipeline:**
 ```bash
 python -m rag.test_end_to_end
 ```
 
-Run the test suite:
+**Run the test suite:**
 ```bash
-pytest
+pytest tests/
 ```
 
 ## Development Status
@@ -124,16 +162,20 @@ pytest
 - Semantic retriever
 - End-to-end RAG chain with LLM integration
 
-**Phase 2 — ML Engineer Intelligence (in progress)**
+**Phase 2 — ML Engineer Intelligence (complete)**
 - Data leakage detector
 - Overfitting risk analyzer
+- Hyperparameter risk analyzer
 - Project scorer
-- Hyperparameter analysis (planned)
-- ML-specific README generation (planned)
+- ML Project Health Report generator
 
-**Phase 3 — Polish & Deployment (upcoming)**
-- Frontend dashboard
-- Deployment
+**Phase 3 — Product Layer (complete)**
+- FastAPI backend exposing all functionality via REST endpoints
+- Streamlit frontend with chat, health dashboard, report viewer, and repo inspector
+
+**Planned**
+- GitHub URL ingestion (analyze a repo directly from its URL, not just a local path)
+- Source citations in chat answers (show which file/chunk an answer was grounded in)
 
 ## Learning Objectives
 
@@ -143,4 +185,6 @@ This project explores practical implementation of:
 - Semantic code chunking
 - Embedding models and vector search
 - Prompt engineering for grounded, non-hallucinated responses
-- ML-specific static analysis (data leakage, overfitting risk detection)
+- ML-specific static analysis (data leakage, overfitting risk, hyperparameter risk detection)
+- Building and exposing an ML pipeline as a REST API
+- Building a usable frontend on top of a multi-stage AI pipeline
