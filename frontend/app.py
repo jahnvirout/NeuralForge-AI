@@ -14,15 +14,18 @@ st.set_page_config(
 API_BASE_URL = os.getenv("BACKEND_API_URL", "http://127.0.0.1:8000")
 
 # ---------------------------------------------------------
-# Strictly Monochrome Minimalist Design (Inter + Grayscale Only)
-# Confident Apple-scale typography hierarchy and smooth transitions
+# NeuralForge AI Design System
+# Minimalist, Apple-inspired editorial scale, pure Inter font,
+# preserved Material Icon fonts, and responsive layout primitives.
 # ---------------------------------------------------------
 RAW_CSS = """
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
 
 @font-face {
     font-family: 'Inter';
@@ -33,65 +36,107 @@ RAW_CSS = """
     unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
-/* Universal Typography Reset */
-*, *::before, *::after,
-html, body, div, span, applet, object, iframe,
-h1, h2, h3, h4, h5, h6, p, blockquote, pre,
-a, abbr, acronym, address, big, cite, code,
-del, dfn, em, img, ins, kbd, q, s, samp,
-small, strike, strong, sub, sup, tt, var,
-b, u, i, center, dl, dt, dd, ol, ul, li,
-fieldset, form, label, legend, table, caption,
-tbody, tfoot, thead, tr, th, td, article, aside,
-canvas, details, embed, figure, figcaption, footer,
-header, hgroup, menu, nav, output, ruby, section,
-summary, time, mark, audio, video, input, textarea,
-button, select, option,
-.stApp, [class*="css"], [class*="st-"], [data-testid],
-.stMarkdown, .stText, [data-baseweb], .stButton, .stTextInput,
-.stSelectbox, .stTabs, [role="tab"], [data-testid="stSidebar"] {
+/* Base Canvas */
+.stApp {
+    background-color: #0c0d11;
+    color: #f5f3ee;
+}
+
+/* Typography Hierarchy — Strictly Inter on all text nodes */
+html, body,
+div:not([data-testid="stIconMaterial"]):not([class*="material-symbols"]):not([class*="material-icons"]),
+p:not([data-testid="stIconMaterial"]):not([class*="material-symbols"]):not([class*="material-icons"]),
+span:not([data-testid="stIconMaterial"]):not([class*="material-symbols"]):not([class*="material-icons"]),
+h1, h2, h3, h4, h5, h6,
+input, textarea, button:not([data-testid="stIconMaterial"]),
+select, label, [data-testid="stMarkdownContainer"] p,
+.stButton button, .stTextInput input, .stSelectbox,
+[data-baseweb="tab"] p, [data-testid="stTab"] p {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }
 
+/* Explicit Preservation of Streamlit / Material Symbols Icon Ligatures */
+[data-testid="stIconMaterial"],
+[data-testid="stIconMaterial"] *,
+.material-symbols-rounded,
+.material-symbols-outlined,
+.material-icons,
+button[data-testid*="stBaseButton-header"] span,
+[data-testid="stSidebarCollapseButton"] span {
+    font-family: 'Material Symbols Rounded', 'Material Symbols Outlined', 'Material Icons' !important;
+    font-weight: normal !important;
+    font-style: normal !important;
+    letter-spacing: normal !important;
+    text-transform: none !important;
+    display: inline-block !important;
+    white-space: nowrap !important;
+    word-wrap: normal !important;
+    direction: ltr !important;
+    -webkit-font-feature-settings: 'liga' !important;
+    font-feature-settings: 'liga' !important;
+    -webkit-font-smoothing: antialiased !important;
+}
+
 code, pre, .mono-code {
-    font-family: 'Inter', monospace !important;
+    font-family: 'Inter', ui-monospace, SFMono-Regular, Consolas, monospace !important;
     font-feature-settings: "tnum" 1;
 }
 
-/* Canvas Base */
-.stApp {
-    background-color: #090a0d;
-    color: #f4f4f6;
+/* Sidebar Styling & Contrast */
+section[data-testid="stSidebar"] {
+    background-color: #08090c !important;
+    border-right: 1px solid #1e2029 !important;
 }
 
-/* Header Container — Confident Scale & Generous Whitespace */
+.sidebar-brand-wrapper {
+    padding: 0.5rem 0 1.25rem 0;
+    border-bottom: 1px solid #1e2029;
+    margin-bottom: 1.5rem;
+}
+
+.sidebar-logo {
+    font-size: 1.15rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.sidebar-sub {
+    font-size: 0.76rem;
+    color: #888a93;
+    letter-spacing: -0.01em;
+    margin-top: 0.2rem;
+}
+
+/* Header Container — Confident Apple-scale Proportions */
 .header-container {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    padding: 2.25rem 0 1.75rem 0;
-    margin-bottom: 2.25rem;
+    padding: 2.25rem 0 1.5rem 0;
+    margin-bottom: 2rem;
     border-bottom: 1px solid #22242b;
 }
 
 .brand-title {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
-    font-size: 2.4rem !important;
+    font-size: 2.5rem !important;
     font-weight: 800 !important;
-    letter-spacing: -0.04em !important;
+    letter-spacing: -0.045em !important;
     color: #ffffff !important;
-    line-height: 1.1 !important;
+    line-height: 1.08 !important;
     display: flex;
     align-items: center;
-    gap: 0.65rem;
+    gap: 0.75rem;
     margin: 0;
 }
 
 .brand-tag {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
-    font-size: 1.05rem !important;
+    font-size: 1.02rem !important;
     font-weight: 400 !important;
     color: #888a93 !important;
     letter-spacing: -0.015em !important;
@@ -99,14 +144,14 @@ code, pre, .mono-code {
     line-height: 1.4 !important;
 }
 
-/* Monochrome Status Pill */
+/* Monochrome / Semantic Status Badges */
 .status-pill-online {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
     padding: 0.35rem 0.85rem;
     border-radius: 9999px;
-    font-size: 0.78rem;
+    font-size: 0.76rem;
     font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -122,7 +167,7 @@ code, pre, .mono-code {
     gap: 0.5rem;
     padding: 0.35rem 0.85rem;
     border-radius: 9999px;
-    font-size: 0.78rem;
+    font-size: 0.76rem;
     font-weight: 500;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -132,27 +177,28 @@ code, pre, .mono-code {
 }
 
 .status-dot-solid {
-    width: 7px;
-    height: 7px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     background-color: #ffffff;
 }
 
 .status-dot-ring {
-    width: 7px;
-    height: 7px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     border: 1px solid #888a93;
     background-color: transparent;
 }
 
-/* Tab Navigation Styling — Explicit Inter & Confident Hierarchy */
+/* Tab Navigation — Smooth Focus, Clear Active/Inactive Contrast */
 .stTabs [data-baseweb="tab-list"] {
     gap: 2rem;
     background-color: transparent;
     padding: 0 0 0.65rem 0;
     border-bottom: 1px solid #22242b;
-    margin-bottom: 2rem;
+    margin-bottom: 2.25rem;
+    overflow-x: auto;
 }
 
 .stTabs button[data-baseweb="tab"],
@@ -162,39 +208,31 @@ div[data-baseweb="tab-list"] button {
     padding: 0.5rem 0 !important;
     background-color: transparent !important;
     border: none !important;
+    outline: none !important;
     transition: color 0.18s ease, border-color 0.18s ease, opacity 0.18s ease !important;
 }
 
 .stTabs button[data-baseweb="tab"] p,
 .stTabs button[data-testid="stTab"] p,
 div[data-baseweb="tab-list"] button p {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
-    font-size: 0.98rem !important;
+    font-size: 0.96rem !important;
     letter-spacing: -0.015em !important;
     margin: 0 !important;
     transition: color 0.18s ease !important;
 }
 
-/* Inactive Tabs */
-.stTabs button[data-baseweb="tab"][aria-selected="false"],
 .stTabs button[data-baseweb="tab"][aria-selected="false"] p,
-.stTabs button[data-testid="stTab"][aria-selected="false"],
 .stTabs button[data-testid="stTab"][aria-selected="false"] p {
-    color: #71717a !important;
+    color: #6e707a !important;
     font-weight: 500 !important;
 }
 
-.stTabs button[data-baseweb="tab"][aria-selected="false"]:hover,
 .stTabs button[data-baseweb="tab"][aria-selected="false"]:hover p,
-.stTabs button[data-testid="stTab"][aria-selected="false"]:hover,
 .stTabs button[data-testid="stTab"][aria-selected="false"]:hover p {
     color: #d4d4d8 !important;
 }
 
-/* Active Tab */
-.stTabs button[data-baseweb="tab"][aria-selected="true"],
 .stTabs button[data-baseweb="tab"][aria-selected="true"] p,
-.stTabs button[data-testid="stTab"][aria-selected="true"],
 .stTabs button[data-testid="stTab"][aria-selected="true"] p {
     color: #ffffff !important;
     font-weight: 700 !important;
@@ -206,9 +244,8 @@ div[data-baseweb="tab-list"] button p {
     box-shadow: none !important;
 }
 
-/* Section Headings */
+/* Headings & Section Dividers */
 .section-headline {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
     font-size: 1.35rem !important;
     font-weight: 700 !important;
     letter-spacing: -0.03em !important;
@@ -217,16 +254,15 @@ div[data-baseweb="tab-list"] button p {
 }
 
 .section-description {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
     font-size: 0.92rem !important;
     color: #888a93 !important;
     margin-bottom: 1.75rem !important;
     line-height: 1.6 !important;
 }
 
-/* Editorial Score Hero */
+/* Overview & Score Hero Component */
 .score-hero-container {
-    padding: 2.5rem 0;
+    padding: 2.25rem 0;
     border-bottom: 1px solid #22242b;
     margin-bottom: 2rem;
 }
@@ -234,7 +270,7 @@ div[data-baseweb="tab-list"] button p {
 .score-display-wrapper {
     display: flex;
     align-items: baseline;
-    gap: 0.6rem;
+    gap: 0.65rem;
 }
 
 .score-huge-num {
@@ -248,53 +284,53 @@ div[data-baseweb="tab-list"] button p {
 .score-total-denom {
     font-size: 1.35rem;
     font-weight: 400;
-    color: #6e7079;
+    color: #6e707a;
     letter-spacing: -0.02em;
 }
 
 .score-status-text {
-    font-size: 1.05rem;
+    font-size: 1.02rem;
     font-weight: 500;
     color: #b0b2ba;
     margin-top: 0.65rem;
     letter-spacing: -0.015em;
 }
 
-/* Metric Summary Strip */
-.metric-strip-row {
+/* Sub-Score Strip */
+.subscore-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 2rem;
-    padding: 1.5rem 0;
+    gap: 1.5rem;
+    padding: 1.25rem 0;
     border-bottom: 1px solid #22242b;
     margin-bottom: 2.25rem;
 }
 
-.metric-strip-item {
+.subscore-card {
     display: flex;
     flex-direction: column;
 }
 
-.metric-strip-count {
-    font-size: 1.85rem;
+.subscore-val {
+    font-size: 1.75rem;
     font-weight: 700;
-    letter-spacing: -0.04em;
+    letter-spacing: -0.035em;
     color: #ffffff;
 }
 
-.metric-strip-label {
-    font-size: 0.8rem;
+.subscore-label {
+    font-size: 0.78rem;
     font-weight: 600;
     color: #888a93;
-    margin-top: 0.25rem;
+    margin-top: 0.2rem;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.04em;
 }
 
-/* Issue Findings */
+/* Diagnostic Finding Rows */
 .issue-row {
-    padding: 1.5rem 0;
-    border-bottom: 1px solid #1c1d22;
+    padding: 1.4rem 0;
+    border-bottom: 1px solid #1c1d24;
     transition: background 0.18s ease;
 }
 
@@ -302,7 +338,7 @@ div[data-baseweb="tab-list"] button p {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.45rem;
 }
 
 .issue-file-loc {
@@ -312,97 +348,87 @@ div[data-baseweb="tab-list"] button p {
     letter-spacing: -0.015em;
 }
 
-.badge-mono-high {
+.badge-high {
     font-size: 0.72rem;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: #ffffff;
-    background: #1e2026;
-    border: 1px solid #4a4d58;
+    color: #f87171;
+    background: #251416;
+    border: 1px solid #4a2428;
     padding: 0.22rem 0.6rem;
     border-radius: 4px;
 }
 
-.badge-mono-med {
+.badge-med {
     font-size: 0.72rem;
-    font-weight: 500;
+    font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: #b0b2ba;
-    background: #14151a;
-    border: 1px dashed #34363e;
+    color: #fbbf24;
+    background: #251d10;
+    border: 1px solid #483918;
+    padding: 0.22rem 0.6rem;
+    border-radius: 4px;
+}
+
+.badge-clean {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #4ade80;
+    background: #122417;
+    border: 1px solid #1c4526;
     padding: 0.22rem 0.6rem;
     border-radius: 4px;
 }
 
 .issue-title-text {
-    font-size: 0.94rem;
+    font-size: 0.92rem;
     font-weight: 400;
     color: #d4d4d8;
     line-height: 1.55;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.45rem;
 }
 
 .issue-remedy-box {
     font-size: 0.86rem;
     font-weight: 400;
     color: #a1a1aa;
-    background: #111216;
+    background: #111218;
     border-left: 2px solid #52525b;
     padding: 0.6rem 0.95rem;
-    margin-top: 0.45rem;
+    margin-top: 0.4rem;
     border-radius: 0 4px 4px 0;
     line-height: 1.55;
 }
 
-/* Sidebar Styling */
-section[data-testid="stSidebar"] {
-    background-color: #060709;
-    border-right: 1px solid #1c1d22;
-}
-
-/* Buttons — Smooth Subtle Transitions */
-.stButton button {
-    border-radius: 6px;
-    font-size: 0.88rem;
-    font-weight: 500;
-    letter-spacing: -0.01em;
-    transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
-    border: 1px solid #2c2e35;
-    background: #14151a;
-    color: #e4e4e7;
-}
-
-.stButton button:hover {
-    background: #20222a;
-    border-color: #4a4d58;
-    color: #ffffff;
-}
-
-.stButton button[kind="primary"] {
-    background: #ffffff;
-    color: #000000;
-    border: 1px solid #ffffff;
-    font-weight: 600;
-}
-
-.stButton button[kind="primary"]:hover {
-    background: #e4e4e7;
-    color: #000000;
-    border-color: #e4e4e7;
-}
-
-/* Chat Messages */
+/* Chat UI Messages — Apple Editorial Spacing & Cards */
 .chat-bubble-user {
-    background: #14151a;
-    border: 1px solid #272830;
+    background: #13141b;
+    border: 1px solid #252733;
     padding: 1rem 1.25rem;
-    border-radius: 6px;
+    border-radius: 8px;
     margin-bottom: 1.25rem;
     font-size: 0.94rem;
-    color: #f4f4f6;
+    color: #f5f3ee;
     line-height: 1.6;
+}
+
+.chat-role-tag {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #888a93;
+    margin-bottom: 0.35rem;
+}
+
+.chat-bubble-user p {
+    margin: 0 !important;
+    color: #f5f3ee !important;
 }
 
 .chat-bubble-ai {
@@ -412,18 +438,50 @@ section[data-testid="stSidebar"] {
     font-size: 0.94rem;
     color: #d4d4d8;
     line-height: 1.68;
-    border-bottom: 1px solid #1c1d22;
+    border-bottom: 1px solid #1e2029;
 }
 
 .mono-banner {
     padding: 1rem 1.25rem;
-    background: #111216;
-    border: 1px solid #272830;
-    border-radius: 6px;
+    background: #111218;
+    border: 1px solid #252733;
+    border-radius: 8px;
     font-size: 0.88rem;
     color: #a1a1aa;
     margin-bottom: 1.5rem;
     line-height: 1.55;
+}
+
+/* Interactive Buttons — No-wrap & Subtle 180ms ease transitions */
+.stButton button {
+    border-radius: 6px !important;
+    font-size: 0.88rem !important;
+    font-weight: 500 !important;
+    letter-spacing: -0.01em !important;
+    white-space: nowrap !important;
+    transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease !important;
+    border: 1px solid #2c2e3a !important;
+    background: #14151e !important;
+    color: #e4e4e7 !important;
+}
+
+.stButton button:hover {
+    background: #20222e !important;
+    border-color: #4a4d60 !important;
+    color: #ffffff !important;
+}
+
+.stButton button[kind="primary"] {
+    background: #ffffff !important;
+    color: #000000 !important;
+    border: 1px solid #ffffff !important;
+    font-weight: 600 !important;
+}
+
+.stButton button[kind="primary"]:hover {
+    background: #e4e4e7 !important;
+    color: #000000 !important;
+    border-color: #e4e4e7 !important;
 }
 </style>
 """
@@ -435,7 +493,7 @@ else:
     st.markdown(RAW_CSS, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# State Initialization
+# State Initialization (Clean Single-Source-of-Truth)
 # ---------------------------------------------------------
 if "session_id" not in st.session_state:
     st.session_state.session_id = None
@@ -445,6 +503,8 @@ if "repo_path" not in st.session_state:
     st.session_state.repo_path = "data/sample_repo"
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
+if "pending_query" not in st.session_state:
+    st.session_state.pending_query = None
 if "audit_report" not in st.session_state:
     st.session_state.audit_report = None
 if "markdown_report" not in st.session_state:
@@ -518,22 +578,29 @@ def api_get_report(repo_path: str):
 
 
 # ---------------------------------------------------------
-# Minimalist Sidebar — Control & Repository Indexing
+# Sidebar — Control Center & Repository Ingestion
 # ---------------------------------------------------------
 with st.sidebar:
-    st.markdown("### NeuralForge")
-    st.caption("Repository Ingestion & Controls")
-    st.markdown("<div style='height: 0.5rem;'></div>", unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="sidebar-brand-wrapper">
+            <div class="sidebar-logo">◈ NEURALFORGE AI</div>
+            <div class="sidebar-sub">Turn messy ML repositories into auditable projects.</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    # Repository Path Input
+    st.markdown("##### Target Repository")
     target_repo = st.text_input(
-        "Repository Path",
+        "Target Repository Path",
         value=st.session_state.repo_path,
-        help="Local filesystem path to target repository",
+        label_visibility="collapsed",
+        help="Path to repository on local filesystem",
     )
     st.session_state.repo_path = target_repo
 
-    # Presets
+    # Presets Row
     col_p1, col_p2 = st.columns(2)
     with col_p1:
         if st.button("Sample Repo", use_container_width=True):
@@ -544,63 +611,56 @@ with st.sidebar:
             st.session_state.repo_path = "."
             st.rerun()
 
-    st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height: 0.75rem;'></div>", unsafe_allow_html=True)
 
-    # Ingestion Actions
-    if st.button("Index Repository", use_container_width=True, type="primary"):
+    # Primary Action: Index / Analyze Repository
+    if st.button("Analyze Repository", use_container_width=True, type="primary"):
         if not target_repo.strip():
-            st.error("Specify a valid path.")
+            st.error("Specify a valid repository path.")
         else:
-            with st.spinner("Extracting AST chunks & indexing in FAISS..."):
-                success, data = api_upload_repo(target_repo)
-                if success and "session_id" in data:
-                    st.session_state.session_id = data["session_id"]
-                    st.session_state.chunks_found = data.get("chunks_found", 0)
-                    st.success(f"Indexed {data.get('chunks_found', 0)} chunks.")
+            with st.spinner("Extracting AST chunks & indexing embeddings..."):
+                # 1. Index Repo
+                success_idx, idx_data = api_upload_repo(target_repo)
+                if success_idx and "session_id" in idx_data:
+                    st.session_state.session_id = idx_data["session_id"]
+                    st.session_state.chunks_found = idx_data.get("chunks_found", 0)
+
+                    # 2. Run Static Audit
+                    success_audit, audit_data = api_analyze_repo(target_repo)
+                    if success_audit:
+                        st.session_state.audit_report = audit_data
+
+                    # 3. Generate Report
+                    success_rep, rep_data = api_get_report(target_repo)
+                    if success_rep:
+                        st.session_state.markdown_report = rep_data.get("report", "")
+
+                    st.success(f"Analysis complete: {idx_data.get('chunks_found', 0)} AST chunks indexed.")
+                    st.rerun()
                 else:
-                    st.error(data.get("error", "Indexing error"))
-
-    if st.button("Run Health Audit", use_container_width=True):
-        if not target_repo.strip():
-            st.error("Specify a valid path.")
-        else:
-            with st.spinner("Executing static ML audits..."):
-                success_audit, audit_data = api_analyze_repo(target_repo)
-                if success_audit:
-                    st.session_state.audit_report = audit_data
-                else:
-                    st.error(audit_data.get("error", "Audit failed"))
-
-                success_rep, rep_data = api_get_report(target_repo)
-                if success_rep:
-                    st.session_state.markdown_report = rep_data.get("report", "")
-
-                if success_audit:
-                    st.success("Audit complete.")
+                    st.error(idx_data.get("error", "Failed to index repository."))
 
     st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
 
-    # Telemetry Summary
+    # Session Status & Telemetry
     st.markdown("##### Session Telemetry")
-    if st.session_state.session_id:
-        st.markdown(
-            f"""
-            <div style="font-size: 0.8rem; color: #888a93; line-height: 1.6;">
-                <div>Active Target: <span style="color: #ffffff; font-weight: 500;">{st.session_state.session_id}</span></div>
-                <div>AST Chunks: <span style="color: #ffffff; font-weight: 500;">{st.session_state.chunks_found}</span></div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    else:
-        st.caption("No repository indexed in this session.")
+    is_connected, _ = check_backend_health()
+
+    st.markdown(
+        f"""
+        <div style="font-size: 0.8rem; color: #888a93; line-height: 1.7;">
+            <div>Backend Engine: <span style="color: {'#4ade80' if is_connected else '#f87171'}; font-weight: 600;">{'ONLINE (8000)' if is_connected else 'OFFLINE'}</span></div>
+            <div>Indexed Target: <span style="color: #ffffff; font-weight: 500;">{st.session_state.session_id or 'None'}</span></div>
+            <div>AST Chunks: <span style="color: #ffffff; font-weight: 500;">{st.session_state.chunks_found}</span></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 # ---------------------------------------------------------
-# Top Navigation Bar — Confident Headline & Minimalist Status
+# Top Header Banner
 # ---------------------------------------------------------
-is_connected, _ = check_backend_health()
-
 st.markdown(
     f"""
     <div class="header-container">
@@ -621,110 +681,47 @@ if not is_connected:
         f"""
         <div class="mono-banner">
             <strong>Engine Offline:</strong> Backend API is unreachable at <code>{API_BASE_URL}</code>.<br>
-            Execute <code>uvicorn backend.main:app --port 8000</code> in your terminal.
+            Start the server via <code>uvicorn backend.main:app --port 8000</code> in your terminal.
         </div>
         """,
         unsafe_allow_html=True,
     )
 
+
 # ---------------------------------------------------------
-# Navigation Tabs
+# Main Product Navigation (5 Unified Workflow Stages)
 # ---------------------------------------------------------
-tab_chat, tab_audit, tab_report, tab_inspector = st.tabs(
+tab_overview, tab_copilot, tab_audit, tab_report, tab_inspector = st.tabs(
     [
-        "Copilot Q&A",
-        "ML Health Dashboard",
-        "Full ML Report",
-        "Repo Inspector",
+        "01 Overview",
+        "02 Copilot",
+        "03 ML Audit",
+        "04 Full Report",
+        "05 Architecture",
     ]
 )
 
+
 # ---------------------------------------------------------
-# TAB 1: Copilot Q&A (RAG Assistant)
+# TAB 1: Overview / Repository Intelligence
 # ---------------------------------------------------------
-with tab_chat:
-    st.markdown('<div class="section-headline">Repository Copilot</div>', unsafe_allow_html=True)
+with tab_overview:
+    st.markdown('<div class="section-headline">Repository Health & Executive Overview</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="section-description">Ask technical questions about model pipelines, preprocessing, architecture, or algorithmic components. Responses are strictly grounded in retrieved AST chunks.</div>',
-        unsafe_allow_html=True,
-    )
-
-    # Prompt Suggestion Strip
-    col_q1, col_q2, col_q3, col_q4 = st.columns(4)
-    quick_query = None
-    with col_q1:
-        if st.button("Model Architectures", use_container_width=True):
-            quick_query = "What machine learning models or algorithms are implemented in this repository?"
-    with col_q2:
-        if st.button("Data Leakage Audit", use_container_width=True):
-            quick_query = "Is there any data leakage or preprocessing issues in the training pipeline?"
-    with col_q3:
-        if st.button("Search & Sorting", use_container_width=True):
-            quick_query = "Explain how search and sorting functions work in this codebase."
-    with col_q4:
-        if st.button("Hyperparameter Risks", use_container_width=True):
-            quick_query = "Are there any tree models with unbounded depth or risky hyperparameters?"
-
-    st.markdown("<div style='height: 1.25rem;'></div>", unsafe_allow_html=True)
-
-    # Chat Feed
-    for msg_item in st.session_state.chat_history:
-        if msg_item["role"] == "user":
-            st.markdown(f'<div class="chat-bubble-user"><strong>Query</strong><br>{msg_item["content"]}</div>', unsafe_allow_html=True)
-        else:
-            with st.chat_message("assistant"):
-                st.markdown(msg_item["content"])
-
-    # Chat Input Box
-    user_input = st.chat_input("Ask a question about the repository...")
-    query_to_send = quick_query or user_input
-
-    if query_to_send:
-        if not st.session_state.session_id:
-            st.markdown('<div class="mono-banner">Index a repository first in the sidebar before initiating queries.</div>', unsafe_allow_html=True)
-        else:
-            st.session_state.chat_history.append({"role": "user", "content": query_to_send})
-            st.markdown(f'<div class="chat-bubble-user"><strong>Query</strong><br>{query_to_send}</div>', unsafe_allow_html=True)
-
-            with st.chat_message("assistant"):
-                with st.spinner("Retrieving code context & generating response..."):
-                    success, res = api_ask_question(st.session_state.session_id, query_to_send)
-                    if success and "answer" in res:
-                        answer_text = res["answer"]
-                        st.markdown(answer_text)
-                        st.session_state.chat_history.append({"role": "assistant", "content": answer_text})
-                    else:
-                        err_msg = res.get("error", "Error generating response.")
-                        st.markdown(f'<div class="mono-banner">{err_msg}</div>', unsafe_allow_html=True)
-                        st.session_state.chat_history.append({"role": "assistant", "content": err_msg})
-
-    if st.session_state.chat_history:
-        st.markdown("<div style='height: 0.5rem;'></div>", unsafe_allow_html=True)
-        if st.button("Clear Conversation", key="clear_chat"):
-            st.session_state.chat_history = []
-            st.rerun()
-
-
-# ---------------------------------------------------------
-# TAB 2: ML Health Dashboard (Phase 2 Intelligence)
-# ---------------------------------------------------------
-with tab_audit:
-    st.markdown('<div class="section-headline">ML Engineering Health & Diagnostics</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="section-description">Automated static inspection evaluating data leakage prevention, test validation coverage, and hyperparameter bounding.</div>',
+        '<div class="section-description">High-level executive evaluation of ML engineering hygiene, data leakage safeguards, and pipeline validation.</div>',
         unsafe_allow_html=True,
     )
 
     if st.session_state.audit_report is None:
-        st.markdown('<div class="mono-banner">Run an ML Health Audit from the sidebar to inspect this repository.</div>', unsafe_allow_html=True)
-        if st.button("Run Audit Now", type="primary"):
-            with st.spinner("Analyzing repository..."):
-                success, audit_data = api_analyze_repo(st.session_state.repo_path)
-                if success:
-                    st.session_state.audit_report = audit_data
-                    st.rerun()
-                else:
-                    st.error(audit_data.get("error", "Audit failed"))
+        st.markdown(
+            f"""
+            <div class="mono-banner">
+                <strong>Repository Loaded:</strong> <code>{st.session_state.repo_path}</code><br>
+                Click <strong>Analyze Repository</strong> in the sidebar to extract AST chunks, run static ML hygiene audits, and index the vector database.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
     else:
         report = st.session_state.audit_report
         score = report.get("overall_score", 0)
@@ -733,9 +730,9 @@ with tab_audit:
         overfitting = report.get("overfitting_risk_issues", [])
         hyperparams = report.get("hyperparameter_issues", [])
 
-        status_text = "Clean Baseline · Follows ML engineering best practices" if score >= 80 else ("Review Recommended · Moderate risks identified" if score >= 50 else "High Risk · Critical data leakage or unvalidated pipelines")
+        status_text = "Clean Baseline · Adheres to core ML engineering standards" if score >= 80 else ("Review Recommended · Moderate pipeline vulnerabilities found" if score >= 50 else "Critical Risk · Severe data leakage or unvalidated models")
 
-        # Large Editorial Score Hero
+        # Large Apple-style Score Hero
         st.markdown(
             f"""
             <div class="score-hero-container">
@@ -749,41 +746,192 @@ with tab_audit:
             unsafe_allow_html=True,
         )
 
-        # Minimal Metric Summary Strip
+        # Sub-score Metrics Strip
         st.markdown(
             f"""
-            <div class="metric-strip-row">
-                <div class="metric-strip-item">
-                    <div class="metric-strip-count">{len(leakage)}</div>
-                    <div class="metric-strip-label">Data Leakage Checks</div>
+            <div class="subscore-grid">
+                <div class="subscore-card">
+                    <div class="subscore-val">{100 - (len(leakage) * 10)}</div>
+                    <div class="subscore-label">ML Preprocessing & Leakage</div>
                 </div>
-                <div class="metric-strip-item">
-                    <div class="metric-strip-count">{len(overfitting)}</div>
-                    <div class="metric-strip-label">Validation Gaps</div>
+                <div class="subscore-card">
+                    <div class="subscore-val">{100 - (len(overfitting) * 10)}</div>
+                    <div class="subscore-label">Validation & Overfitting</div>
                 </div>
-                <div class="metric-strip-item">
-                    <div class="metric-strip-count">{len(hyperparams)}</div>
-                    <div class="metric-strip-label">Hyperparameter Risks</div>
+                <div class="subscore-card">
+                    <div class="subscore-val">{100 - (len(hyperparams) * 10)}</div>
+                    <div class="subscore-label">Hyperparameter Bounding</div>
                 </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-        # Diagnostic Findings List
+        # Overview Summary Findings
+        st.markdown("##### At-a-Glance Diagnostic Summary")
         if total_issues == 0:
-            st.markdown('<div class="mono-banner">No issues flagged. Clean implementation.</div>', unsafe_allow_html=True)
+            st.markdown('<div class="mono-banner">No vulnerabilities detected. AST structure follows recommended best practices.</div>', unsafe_allow_html=True)
         else:
-            st.markdown('<div class="section-headline" style="font-size: 1rem; margin-top: 1rem; text-transform: uppercase; letter-spacing: 0.04em;">Detailed Findings</div>', unsafe_allow_html=True)
-
-            # Data Leakage
             for item in leakage:
                 st.markdown(
                     f"""
                     <div class="issue-row">
                         <div class="issue-header">
                             <span class="issue-file-loc">{item.get('file')} {f'· Line {item.get("line")}' if item.get("line") else ''}</span>
-                            <span class="badge-mono-high">High · Data Leakage</span>
+                            <span class="badge-high">High · Data Leakage</span>
+                        </div>
+                        <div class="issue-title-text">{item.get('issue')}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            for item in overfitting:
+                st.markdown(
+                    f"""
+                    <div class="issue-row">
+                        <div class="issue-header">
+                            <span class="issue-file-loc">{item.get('file')}</span>
+                            <span class="badge-med">Medium · Validation Gap</span>
+                        </div>
+                        <div class="issue-title-text">{item.get('issue')}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            for item in hyperparams:
+                st.markdown(
+                    f"""
+                    <div class="issue-row">
+                        <div class="issue-header">
+                            <span class="issue-file-loc">{item.get('file')}</span>
+                            <span class="badge-med">Medium · Hyperparameter</span>
+                        </div>
+                        <div class="issue-title-text">{item.get('issue')}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+
+# ---------------------------------------------------------
+# TAB 2: Copilot Q&A (RAG Assistant)
+# ---------------------------------------------------------
+with tab_copilot:
+    st.markdown('<div class="section-headline">Repository Copilot</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-description">Ask technical questions about model pipelines, preprocessing, architecture, or algorithmic components. Responses are strictly grounded in retrieved AST chunks.</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Prompt Suggestion Chips (Dispatches to pending_query)
+    col_q1, col_q2, col_q3, col_q4 = st.columns(4)
+    with col_q1:
+        if st.button("Model Architectures", key="btn_q_arch", use_container_width=True):
+            st.session_state.pending_query = "What machine learning models or algorithms are implemented in this repository?"
+            st.rerun()
+    with col_q2:
+        if st.button("Data Leakage Audit", key="btn_q_leak", use_container_width=True):
+            st.session_state.pending_query = "Is there any data leakage or preprocessing issues in the training pipeline?"
+            st.rerun()
+    with col_q3:
+        if st.button("Search & Sorting", key="btn_q_sort", use_container_width=True):
+            st.session_state.pending_query = "Explain how search and sorting functions work in this codebase."
+            st.rerun()
+    with col_q4:
+        if st.button("Hyperparameter Risks", key="btn_q_hyper", use_container_width=True):
+            st.session_state.pending_query = "Are there any tree models with unbounded depth or risky hyperparameters?"
+            st.rerun()
+
+    st.markdown("<div style='height: 1.25rem;'></div>", unsafe_allow_html=True)
+
+    # Process Incoming Pending Query (Single Pipeline Step)
+    if st.session_state.pending_query:
+        active_query = st.session_state.pending_query
+        st.session_state.pending_query = None  # Consume query immediately
+
+        if not st.session_state.session_id:
+            st.session_state.chat_history.append({"role": "user", "content": active_query})
+            st.session_state.chat_history.append({"role": "assistant", "content": "Please index a repository first using the **Analyze Repository** button in the sidebar."})
+        else:
+            st.session_state.chat_history.append({"role": "user", "content": active_query})
+            with st.spinner("Retrieving AST chunks & generating grounded response..."):
+                success, res = api_ask_question(st.session_state.session_id, active_query)
+                if success and "answer" in res:
+                    st.session_state.chat_history.append({"role": "assistant", "content": res["answer"]})
+                else:
+                    st.session_state.chat_history.append({"role": "assistant", "content": res.get("error", "Error connecting to LLM service.")})
+        st.rerun()
+
+    # Render Chat History (Single Loop — Guaranteed Zero Duplicates)
+    for msg in st.session_state.chat_history:
+        if msg["role"] == "user":
+            st.markdown(
+                f"""
+                <div class="chat-bubble-user">
+                    <span class="chat-role-tag">Query</span>
+                    <p>{msg['content']}</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            with st.chat_message("assistant"):
+                st.markdown(msg["content"])
+
+    # Chat Input Box
+    user_chat_input = st.chat_input("Ask a question about the repository...")
+    if user_chat_input:
+        st.session_state.pending_query = user_chat_input
+        st.rerun()
+
+    # Clear Conversation Action
+    if st.session_state.chat_history:
+        st.markdown("<div style='height: 0.75rem;'></div>", unsafe_allow_html=True)
+        if st.button("Clear Conversation", key="clear_chat_btn"):
+            st.session_state.chat_history = []
+            st.rerun()
+
+
+# ---------------------------------------------------------
+# TAB 3: ML Audit / Health Dashboard
+# ---------------------------------------------------------
+with tab_audit:
+    st.markdown('<div class="section-headline">ML Engineering Diagnostics & Audit</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-description">Deep-dive AST-level inspection evaluating preprocessing leakage, validation coverage, and hyperparameter bounding with actionable remediation steps.</div>',
+        unsafe_allow_html=True,
+    )
+
+    if st.session_state.audit_report is None:
+        st.markdown('<div class="mono-banner">Run an ML Health Audit from the sidebar to inspect this repository.</div>', unsafe_allow_html=True)
+        if st.button("Run Audit Now", type="primary", key="audit_run_now_btn"):
+            with st.spinner("Executing static AST inspection..."):
+                success, audit_data = api_analyze_repo(st.session_state.repo_path)
+                if success:
+                    st.session_state.audit_report = audit_data
+                    st.rerun()
+                else:
+                    st.error("Audit execution failed.")
+    else:
+        report = st.session_state.audit_report
+        total_issues = report.get("total_issues", 0)
+        leakage = report.get("data_leakage_issues", [])
+        overfitting = report.get("overfitting_risk_issues", [])
+        hyperparams = report.get("hyperparameter_issues", [])
+
+        if total_issues == 0:
+            st.markdown('<div class="mono-banner">No issues flagged across all rules. Clean ML codebase.</div>', unsafe_allow_html=True)
+        else:
+            st.markdown("##### Detailed Vulnerabilities & Remediation")
+
+            # Data Leakage Findings
+            for item in leakage:
+                st.markdown(
+                    f"""
+                    <div class="issue-row">
+                        <div class="issue-header">
+                            <span class="issue-file-loc">{item.get('file')} {f'· Line {item.get("line")}' if item.get("line") else ''}</span>
+                            <span class="badge-high">High · Data Leakage</span>
                         </div>
                         <div class="issue-title-text">{item.get('issue')}</div>
                         <div class="issue-remedy-box"><strong>Remediation:</strong> {item.get('suggestion')}</div>
@@ -792,14 +940,14 @@ with tab_audit:
                     unsafe_allow_html=True,
                 )
 
-            # Overfitting Risks
+            # Validation Gaps
             for item in overfitting:
                 st.markdown(
                     f"""
                     <div class="issue-row">
                         <div class="issue-header">
                             <span class="issue-file-loc">{item.get('file')}</span>
-                            <span class="badge-mono-med">Medium · Validation Gap</span>
+                            <span class="badge-med">Medium · Validation Gap</span>
                         </div>
                         <div class="issue-title-text">{item.get('issue')}</div>
                         <div class="issue-remedy-box"><strong>Remediation:</strong> {item.get('suggestion')}</div>
@@ -815,7 +963,7 @@ with tab_audit:
                     <div class="issue-row">
                         <div class="issue-header">
                             <span class="issue-file-loc">{item.get('file')}</span>
-                            <span class="badge-mono-med">Medium · Hyperparameter</span>
+                            <span class="badge-med">Medium · Hyperparameter Risk</span>
                         </div>
                         <div class="issue-title-text">{item.get('issue')}</div>
                         <div class="issue-remedy-box"><strong>Remediation:</strong> {item.get('suggestion')}</div>
@@ -826,18 +974,18 @@ with tab_audit:
 
 
 # ---------------------------------------------------------
-# TAB 3: Full ML Project Report (Markdown)
+# TAB 4: Full ML Report
 # ---------------------------------------------------------
 with tab_report:
-    st.markdown('<div class="section-headline">ML Project Health Report</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-headline">Publication-Grade ML Project Report</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="section-description">Publication-grade Markdown report documenting repository architecture, structural findings, and remediation steps.</div>',
+        '<div class="section-description">Comprehensive engineering report documenting repository architecture, structural findings, and remediation steps.</div>',
         unsafe_allow_html=True,
     )
 
     if not st.session_state.markdown_report:
         st.markdown('<div class="mono-banner">Generate the ML Health Report to view the document.</div>', unsafe_allow_html=True)
-        if st.button("Generate Report", type="primary", key="gen_rep_btn"):
+        if st.button("Generate Report", type="primary", key="gen_rep_btn_tab4"):
             with st.spinner("Compiling report..."):
                 success, rep_data = api_get_report(st.session_state.repo_path)
                 if success:
@@ -856,7 +1004,7 @@ with tab_report:
                 use_container_width=True,
             )
         with col_r2:
-            if st.button("Regenerate", key="regen_rep_btn"):
+            if st.button("Regenerate Report", key="regen_rep_btn_tab4"):
                 with st.spinner("Regenerating..."):
                     success, rep_data = api_get_report(st.session_state.repo_path)
                     if success:
@@ -868,7 +1016,7 @@ with tab_report:
 
 
 # ---------------------------------------------------------
-# TAB 4: Repo Inspector & Telemetry
+# TAB 5: Repo Inspector & System Architecture
 # ---------------------------------------------------------
 with tab_inspector:
     st.markdown('<div class="section-headline">Repository Inspector & System Architecture</div>', unsafe_allow_html=True)

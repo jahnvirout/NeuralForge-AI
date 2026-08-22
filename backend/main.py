@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 from parser.repository_parser import parse_repository
 from parser.repo_chunker import chunk_repository
+from parser.github_ingestion import clone_github_repo, cleanup_repo, is_valid_github_url
 from embeddings.embedder import embed_chunks
 from vector_db.vector_store import VectorStore
 from retrieval.retriever import Retriever
@@ -25,13 +26,33 @@ class QuestionRequest(BaseModel):
     question: str
 
 
+def resolve_repo_source(source):
+    """
+    Takes either a local folder path or a GitHub URL.
+    If it's a GitHub URL, clones it to a temp folder and returns that path
+    plus the temp folder (so the caller can clean it up afterward).
+    If it's a local path, returns it unchanged with no temp folder to clean.
+    """
+    if is_valid_github_url(source):
+        temp_dir = clone_github_repo(source)
+        return temp_dir, temp_dir
+    else:
+        return source, None
+
+
 @app.post("/upload-repo")
 def upload_repo(request: RepoRequest):
     """
-    Parses, chunks, embeds, and indexes a repo. Returns a session_id
-    to use for asking questions later.
+    Parses, chunks, embeds, and indexes a repo. Accepts either a local
+    folder path or a GitHub URL. Returns a session_id to use for asking
+    questions later.
     """
-    chunks = chunk_repository(request.repo_path)
+    try:
+        actual_path, temp_dir = resolve_repo_source(request.repo_path)
+    except ValueError as e:
+        return {"error": str(e)}
+
+    chunks = chunk_repository(actual_path)
     chunks = embed_chunks(chunks)
 
     store = VectorStore()
@@ -39,9 +60,12 @@ def upload_repo(request: RepoRequest):
 
     retriever = Retriever(store)
 
-    session_id = request.repo_path
+    session_id = request.repo_path  # use the original input (URL or path) as the session key
 
     sessions[session_id] = retriever
+
+    if temp_dir:
+        cleanup_repo(temp_dir)
 
     return {"session_id": session_id, "chunks_found": len(chunks)}
 
@@ -64,9 +88,19 @@ def ask(request: QuestionRequest):
 def analyze(request: RepoRequest):
     """
     Runs Phase 2 ML intelligence checks and returns a score + issue report.
+    Accepts either a local folder path or a GitHub URL.
     """
-    files = parse_repository(request.repo_path)
+    try:
+        actual_path, temp_dir = resolve_repo_source(request.repo_path)
+    except ValueError as e:
+        return {"error": str(e)}
+
+    files = parse_repository(actual_path)
     report = score_project(files)
+
+    if temp_dir:
+        cleanup_repo(temp_dir)
+
     return report
 
 
@@ -74,12 +108,22 @@ def analyze(request: RepoRequest):
 def report(request: RepoRequest):
     """
     Generates the full ML project health report as Markdown text.
+    Accepts either a local folder path or a GitHub URL.
     """
-    files = parse_repository(request.repo_path)
-    chunks = chunk_repository(request.repo_path)
+    try:
+        actual_path, temp_dir = resolve_repo_source(request.repo_path)
+    except ValueError as e:
+        return {"error": str(e)}
+
+    files = parse_repository(actual_path)
+    chunks = chunk_repository(actual_path)
     score_report = score_project(files)
 
     report_text = generate_ml_report(files, chunks, score_report)
+
+    if temp_dir:
+        cleanup_repo(temp_dir)
+
     return {"report": report_text}
 
 
