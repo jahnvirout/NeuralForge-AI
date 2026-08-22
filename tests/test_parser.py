@@ -3,7 +3,7 @@ from parser.repository_parser import parse_repository
 
 def test_parser_finds_all_files():
     result = parse_repository("data/sample_repo")
-    assert len(result) == 3
+    assert len(result) == 4
 
 
 def test_parser_returns_correct_language():
