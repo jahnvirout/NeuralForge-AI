@@ -531,7 +531,7 @@ def api_upload_repo(repo_path: str):
         res = requests.post(
             f"{API_BASE_URL}/upload-repo",
             json={"repo_path": repo_path},
-            timeout=30,
+            timeout=300,
         )
         return res.status_code == 200, res.json()
     except Exception as e:
@@ -544,7 +544,7 @@ def api_ask_question(session_id: str, question: str):
         res = requests.post(
             f"{API_BASE_URL}/ask",
             json={"session_id": session_id, "question": question},
-            timeout=60,
+            timeout=120,
         )
         return res.status_code == 200, res.json()
     except Exception as e:
@@ -557,7 +557,7 @@ def api_analyze_repo(repo_path: str):
         res = requests.post(
             f"{API_BASE_URL}/analyze",
             json={"repo_path": repo_path},
-            timeout=30,
+            timeout=180,
         )
         return res.status_code == 200, res.json()
     except Exception as e:
@@ -570,7 +570,7 @@ def api_get_report(repo_path: str):
         res = requests.post(
             f"{API_BASE_URL}/report",
             json={"repo_path": repo_path},
-            timeout=30,
+            timeout=180,
         )
         return res.status_code == 200, res.json()
     except Exception as e:
