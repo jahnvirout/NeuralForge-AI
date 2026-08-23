@@ -514,10 +514,21 @@ if "markdown_report" not in st.session_state:
 # ---------------------------------------------------------
 # API Helper Functions (Exact Contracts Preserved)
 # ---------------------------------------------------------
+def parse_api_response(res):
+    try:
+        data = res.json()
+    except ValueError:
+        data = {
+            "error": f"Backend returned HTTP {res.status_code}: "
+                     f"{res.text[:300] or 'empty response'}"
+        }
+
+    return 200 <= res.status_code < 300, data
+
 def check_backend_health():
     """Pings backend root endpoint to check connectivity."""
     try:
-        res = requests.get(f"{API_BASE_URL}/", timeout=2)
+        res = requests.get(f"{API_BASE_URL}/", timeout=30)
         if res.status_code == 200:
             return True, res.json().get("message", "API running")
     except Exception as e:
@@ -533,7 +544,7 @@ def api_upload_repo(repo_path: str):
             json={"repo_path": repo_path},
             timeout=300,
         )
-        return res.status_code == 200, res.json()
+        return parse_api_response(res)
     except Exception as e:
         return False, {"error": f"Failed to connect to backend: {str(e)}"}
 
@@ -546,7 +557,7 @@ def api_ask_question(session_id: str, question: str):
             json={"session_id": session_id, "question": question},
             timeout=120,
         )
-        return res.status_code == 200, res.json()
+        return parse_api_response(res)
     except Exception as e:
         return False, {"error": f"Inquiry failed: {str(e)}"}
 
@@ -559,7 +570,7 @@ def api_analyze_repo(repo_path: str):
             json={"repo_path": repo_path},
             timeout=180,
         )
-        return res.status_code == 200, res.json()
+        return parse_api_response(res)
     except Exception as e:
         return False, {"error": f"Static ML analysis failed: {str(e)}"}
 
@@ -572,7 +583,7 @@ def api_get_report(repo_path: str):
             json={"repo_path": repo_path},
             timeout=180,
         )
-        return res.status_code == 200, res.json()
+        return parse_api_response(res)
     except Exception as e:
         return False, {"error": f"Report generation failed: {str(e)}"}
 
