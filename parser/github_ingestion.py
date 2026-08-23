@@ -5,7 +5,7 @@ from pathlib import Path
 
 import git
 
-MAX_REPO_SIZE_MB = 50  # reject repos larger than this after cloning
+MAX_REPO_SIZE_MB = 300  # reject repos larger than this after cloning
 
 
 def is_valid_github_url(url):
