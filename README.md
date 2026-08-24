@@ -13,8 +13,9 @@ NeuralForge AI bridges this gap in two ways: by indexing a repository and answer
 ## Features
 
 ### Repository Understanding
-- Parses Python repositories, ignoring irrelevant directories (venv, node_modules, .git)
-- Reads source files with encoding and size safeguards
+- Parses supported source files (`.py`, `.java`, `.cpp`, `.c`, `.js`, and `.ts`)
+- Ignores irrelevant directories (`venv`, `node_modules`, `.git`, caches)
+- Skips files larger than approximately 500 KB and handles encoding errors safely
 - Builds structured repository metadata
 
 ### Intelligent Code Chunking
@@ -24,7 +25,7 @@ NeuralForge AI bridges this gap in two ways: by indexing a repository and answer
 
 ### Semantic Search
 - Generates embeddings for code chunks using sentence-transformers (all-MiniLM-L6-v2)
-- Stores embeddings in a FAISS vector index
+- Stores embeddings in an in-memory FAISS vector index for the active session
 - Performs similarity search to find relevant code for a given query
 
 ### Retrieval-Augmented Generation (RAG)
@@ -41,18 +42,21 @@ NeuralForge AI bridges this gap in two ways: by indexing a repository and answer
 - **ML Project Health Report generator** — produces a full Markdown report combining chunk stats and all findings, downloadable from the frontend
 
 ### Backend API (FastAPI)
-The entire pipeline is exposed as a REST API, not just terminal scripts:
+The pipeline is exposed as a REST API, not just terminal scripts:
+- `GET /` — backend health check
 - `POST /upload-repo` — parses, chunks, embeds, and indexes a repository
 - `POST /ask` — answers a question grounded in the indexed repository
 - `POST /analyze` — runs Phase 2 checks and returns the score/issue report
 - `POST /report` — generates the full Markdown health report
+- `GET /docs` — interactive FastAPI documentation
 
 ### Frontend (Streamlit)
-A clean, minimal dashboard with four views:
+A clean, minimal dashboard with five tabs:
+- **Overview** — repository health and executive summary
 - **Copilot Q&A** — chat interface for asking questions about the codebase
 - **ML Health Dashboard** — visual score and itemized issue breakdown
 - **Full ML Report** — rendered report with one-click Markdown download
-- **Repo Inspector** — pipeline architecture and live session telemetry
+- **Architecture** — pipeline architecture and live session telemetry
 
 ## Architecture
 
@@ -73,9 +77,10 @@ LLM (Groq) ---- ML Intelligence Checks (Phase 2)
     |                    |
 Context-Aware Response   Score + Issue Report
     |                    |
-    +--------------------+
+     +--------------------+
              |
       FastAPI Backend
+      (in-memory sessions)
              |
       Streamlit Frontend
 ```
@@ -119,9 +124,13 @@ NeuralForge-AI/
 git clone https://github.com/<your-username>/NeuralForge-AI.git
 cd NeuralForge-AI
 python -m venv venv
-venv\Scripts\activate       # Windows
-pip install -r requirements.txt
+.\venv\Scripts\Activate.ps1       # Windows PowerShell
+python -m pip install -r requirements.txt
 ```
+
+The project is developed and tested with Python 3.13.6. If PowerShell blocks
+the activation script, run the project with the Python executable from your
+virtual environment instead.
 
 Create a `.env` file in the project root:
 ```
@@ -132,12 +141,12 @@ GROQ_API_KEY=your_key_here
 
 Terminal 1:
 ```bash
-uvicorn backend.main:app --reload --port 8000
+python -m uvicorn backend.main:app --reload --port 8000
 ```
 
 Terminal 2:
 ```bash
-streamlit run frontend/app.py
+python -m streamlit run frontend/app.py
 ```
 
 Open `http://localhost:8501` in your browser.
@@ -151,6 +160,58 @@ python -m rag.test_end_to_end
 ```bash
 pytest tests/
 ```
+
+When running locally, the frontend uses `http://127.0.0.1:8000` by default.
+For a deployed frontend, set `BACKEND_API_URL` to the public backend URL.
+
+## GitHub Repositories
+
+`/upload-repo`, `/analyze`, and `/report` accept either a local repository path
+or a public GitHub HTTPS URL, for example:
+
+```text
+https://github.com/karpathy/micrograd
+```
+
+GitHub repositories are cloned with a shallow clone. The current ingestion
+guard rejects a cloned repository larger than 300 MB. The parser also skips
+unsupported files and individual source files larger than approximately 500 KB.
+These safeguards prevent a single request from exhausting the backend.
+
+## Deployment
+
+The application is deployed as two Render Web Services: a FastAPI backend and
+a Streamlit frontend.
+
+### Backend service
+
+- **Build command:** `pip install -r requirements.txt`
+- **Start command:** `uvicorn backend.main:app --host 0.0.0.0 --port $PORT`
+- **Health check path:** `/`
+- **Environment variables:** `GROQ_API_KEY`, `PYTHON_VERSION=3.13.6`
+
+### Frontend service
+
+- **Root directory:** `frontend`
+- **Build command:** `pip install -r requirements.txt`
+- **Start command:** `streamlit run app.py --server.address 0.0.0.0 --server.port $PORT`
+- **Environment variable:** `BACKEND_API_URL=<public-backend-url>`
+
+Keep `GROQ_API_KEY` on the backend only; it must not be exposed to the
+frontend. The frontend URL is the user-facing website, while the backend URL
+is used for the API and `/docs`.
+
+## Current Limitations
+
+- FAISS indexes and retriever sessions are stored in memory; they reset when
+  the backend restarts or sleeps.
+- Repository indexing is synchronous, so very large repositories can exceed
+  request timeouts or available memory.
+- The `sentence-transformers` model, PyTorch, and FAISS are memory-intensive;
+  small Render instances may restart while indexing larger repositories.
+- The current implementation is designed for bounded code repositories, not
+  unlimited 1 GB+ ingestion. Background jobs, incremental indexing, and a
+  persistent vector database are future scalability work.
 
 ## Development Status
 
@@ -173,9 +234,13 @@ pytest tests/
 - FastAPI backend exposing all functionality via REST endpoints
 - Streamlit frontend with chat, health dashboard, report viewer, and repo inspector
 
+**Implemented after the initial phases**
+- Public GitHub URL ingestion with shallow cloning and cleanup
+
 **Planned**
-- GitHub URL ingestion (analyze a repo directly from its URL, not just a local path)
 - Source citations in chat answers (show which file/chunk an answer was grounded in)
+- Background indexing jobs and progress reporting for large repositories
+- Persistent vector storage across backend restarts
 
 ## Learning Objectives
 
