@@ -13,15 +13,17 @@ NeuralForge AI bridges this gap in two ways: by indexing a repository and answer
 ## Features
 
 ### Repository Understanding
-- Parses supported source files (`.py`, `.java`, `.cpp`, `.c`, `.js`, and `.ts`)
-- Ignores irrelevant directories (`venv`, `node_modules`, `.git`, caches)
-- Skips files larger than approximately 500 KB and handles encoding errors safely
+- Recursively walks the repository and recognizes `.py`, `.java`, `.cpp`, `.c`, `.js`, and `.ts` files
+- Skips only the currently hard-coded directories (`venv`, `node_modules`, `.git`, and caches)
+- Skips individual source files larger than approximately 500 KB and handles encoding errors safely
+- Does **not** yet distinguish important project files from redundant data, build artifacts, checkpoints, or other large folders
 - Builds structured repository metadata
 
 ### Intelligent Code Chunking
 - Python AST-based parsing (not naive text splitting)
 - Function-level and class-level chunking
 - Preserves complete logical code blocks
+- Only Python files are converted into AST chunks for semantic retrieval
 
 ### Semantic Search
 - Generates embeddings for code chunks using sentence-transformers (all-MiniLM-L6-v2)
@@ -174,9 +176,12 @@ https://github.com/karpathy/micrograd
 ```
 
 GitHub repositories are cloned with a shallow clone. The current ingestion
-guard rejects a cloned repository larger than 300 MB. The parser also skips
-unsupported files and individual source files larger than approximately 500 KB.
-These safeguards prevent a single request from exhausting the backend.
+guard rejects a cloned repository larger than 300 MB. This size check is
+performed after cloning and counts the cloned directory, including files that
+the parser will later ignore. The parser then skips only the hard-coded
+directories, unsupported extensions, and individual source files larger than
+approximately 500 KB. It does not yet intelligently remove every redundant
+project folder or select only the repository's "main" files.
 
 ## Deployment
 
@@ -205,13 +210,19 @@ is used for the API and `/docs`.
 
 - FAISS indexes and retriever sessions are stored in memory; they reset when
   the backend restarts or sleeps.
-- Repository indexing is synchronous, so very large repositories can exceed
-  request timeouts or available memory.
+- Repository indexing is synchronous, so large repositories can exceed request
+  timeouts or available memory.
+- The repository-size check happens before parsing and currently counts
+  redundant files too, so a repository can be rejected even when its useful
+  source code would be much smaller.
+- Filtering is basic, not relevance-aware: datasets, checkpoints, build
+  outputs, and other project-specific noise are not automatically excluded
+  unless they fall under the existing hard-coded rules.
 - The `sentence-transformers` model, PyTorch, and FAISS are memory-intensive;
   small Render instances may restart while indexing larger repositories.
 - The current implementation is designed for bounded code repositories, not
-  unlimited 1 GB+ ingestion. Background jobs, incremental indexing, and a
-  persistent vector database are future scalability work.
+  unlimited 1 GB+ ingestion. Intelligent file filtering, background jobs,
+  incremental indexing, and persistent vector storage are future work.
 
 ## Development Status
 

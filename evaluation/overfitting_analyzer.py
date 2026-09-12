@@ -1,4 +1,4 @@
-def detect_no_validation(code, file_path):
++def detect_no_validation(code, file_path):
     has_fit = ".fit(" in code
     has_evaluation = any(pattern in code for pattern in [
         ".score(X_test", ".predict(X_test", ".evaluate(X_test",
