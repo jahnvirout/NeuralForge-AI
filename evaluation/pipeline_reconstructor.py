@@ -1,12 +1,23 @@
 import ast
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 
-DATA_LOAD_NAMES = {
-    "read_csv", "read_table", "read_parquet", "read_sql", "read_excel",
-    "read_json", "load_dataset", "load_iris", "load_digits", "load_diabetes",
-    "load_boston", "load_wine", "load_breast_cancer", "fetch_openml",
-    "fetch_california_housing", "np.load", "genfromtxt", "loadtxt",
+PANDAS_LOADERS = {
+    "read_csv", "read_table", "read_parquet", "read_sql", "read_sql_query",
+    "read_sql_table", "read_excel", "read_json", "read_feather", "read_hdf",
+    "read_stata", "read_sas", "read_pickle",
+}
+
+NUMPY_LOADERS = {
+    "load", "loadtxt", "genfromtxt", "fromfile", "fromregex",
+}
+
+DATASET_LOADERS = {
+    "load_dataset",
+    "load_iris", "load_digits", "load_diabetes", "load_wine", "load_breast_cancer",
+    "load_linnerud", "fetch_openml", "fetch_california_housing", "fetch_20newsgroups",
+    "fetch_lfw_people", "fetch_olivetti_faces", "fetch_rcv1", "fetch_kddcup99",
+    "fetch_covtype", "make_classification", "make_regression", "make_blobs",
 }
 
 PREPROCESSING_CALLS = {
@@ -28,25 +39,67 @@ EVALUATION_CALLS = {
 }
 
 
-def _get_call_name(node: ast.AST) -> str:
-    """Extracts function or method name from Call node."""
+def _get_call_details(node: ast.AST) -> Tuple[str, str]:
+    """Extracts (prefix, func_name) from Call node, e.g. ('pd', 'read_csv') or ('', 'load_dataset')."""
     if isinstance(node, ast.Name):
-        return node.id
+        return ("", node.id)
     if isinstance(node, ast.Attribute):
-        return node.attr
-    return ""
+        value_name = ""
+        if isinstance(node.value, ast.Name):
+            value_name = node.value.id
+        elif isinstance(node.value, ast.Attribute):
+            value_name = node.value.attr
+        return (value_name, node.attr)
+    return ("", "")
+
+
+def _is_data_ingestion_call(prefix: str, func_name: str) -> bool:
+    """Matches only real data loader calls, never arbitrary load_ or read_ prefixes."""
+    if func_name in PANDAS_LOADERS:
+        return prefix in ("pd", "pandas", "")
+    if func_name in NUMPY_LOADERS:
+        if func_name == "load":
+            return prefix in ("np", "numpy")
+        return prefix in ("np", "numpy", "")
+    if func_name in DATASET_LOADERS:
+        return True
+    return False
+
+
+def is_training_script(code: str) -> bool:
+    """Checks whether a Python script contains evidence of model training (split call AND fit call)."""
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return False
+
+    has_split = False
+    has_fit = False
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            prefix, func_name = _get_call_details(node.func)
+            if func_name in SPLIT_CALLS:
+                has_split = True
+            elif func_name == "fit":
+                has_fit = True
+
+            if has_split and has_fit:
+                return True
+
+    return False
 
 
 def reconstruct_file_pipeline(code: str, file_path: str) -> Optional[Dict[str, Any]]:
     """
     Reconstructs the end-to-end ML pipeline for a single Python file from its AST.
     Traces 5 fundamental stages:
-      1. Data Loading
+      1. Data Loading (matched by real loaders, never prefix)
       2. Feature Preprocessing
       3. Dataset Splitting
-      4. Model Training (Fit)
-      5. Evaluation & Validation
-    Returns None if the file has no ML-related operations.
+      4. Model Training (fit)
+      5. Evaluation (score/predict only if fit is present)
+    Returns None if fewer than 2 stages have evidence.
     """
     try:
         tree = ast.parse(code)
@@ -61,23 +114,24 @@ def reconstruct_file_pipeline(code: str, file_path: str) -> Optional[Dict[str, A
         "evaluation": {"status": "insufficient evidence", "evidence": "Not found in AST", "line": None},
     }
 
-    ml_found = False
+    has_fit = False
+    eval_candidate = None
 
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
 
-        call_name = _get_call_name(node.func)
+        prefix, call_name = _get_call_details(node.func)
 
-        # 1. Data Loading
+        # 1. Data Loading (strict exact calls, no prefix matching)
         if stages["data_load"]["status"] != "found":
-            if call_name in DATA_LOAD_NAMES or "load_" in call_name or "read_" in call_name:
+            if _is_data_ingestion_call(prefix, call_name):
+                call_display = f"{prefix}.{call_name}()" if prefix else f"{call_name}()"
                 stages["data_load"] = {
                     "status": "found",
-                    "evidence": f"{call_name}()",
+                    "evidence": call_display,
                     "line": node.lineno,
                 }
-                ml_found = True
 
         # 2. Preprocessing
         if stages["preprocessing"]["status"] != "found":
@@ -87,7 +141,6 @@ def reconstruct_file_pipeline(code: str, file_path: str) -> Optional[Dict[str, A
                     "evidence": f"{call_name}()",
                     "line": node.lineno,
                 }
-                ml_found = True
 
         # 3. Splitting
         if stages["split"]["status"] != "found":
@@ -97,29 +150,35 @@ def reconstruct_file_pipeline(code: str, file_path: str) -> Optional[Dict[str, A
                     "evidence": f"{call_name}()",
                     "line": node.lineno,
                 }
-                ml_found = True
 
         # 4. Model Training (fit)
-        if stages["model_fit"]["status"] != "found":
-            if call_name == "fit":
+        if call_name == "fit":
+            has_fit = True
+            if stages["model_fit"]["status"] != "found":
                 stages["model_fit"] = {
                     "status": "found",
                     "evidence": ".fit()",
                     "line": node.lineno,
                 }
-                ml_found = True
 
-        # 5. Model Evaluation
-        if stages["evaluation"]["status"] != "found":
-            if call_name in EVALUATION_CALLS:
-                stages["evaluation"] = {
-                    "status": "found",
-                    "evidence": f"{call_name}()",
-                    "line": node.lineno,
-                }
-                ml_found = True
+        # 5. Model Evaluation (candidate tracked, accepted only if has_fit)
+        if call_name in EVALUATION_CALLS and eval_candidate is None:
+            eval_candidate = {
+                "evidence": f"{call_name}()",
+                "line": node.lineno,
+            }
 
-    if not ml_found:
+    # Evaluation only counts when the same file also has a fit call
+    if has_fit and eval_candidate is not None:
+        stages["evaluation"] = {
+            "status": "found",
+            "evidence": eval_candidate["evidence"],
+            "line": eval_candidate["line"],
+        }
+
+    # Reject files with fewer than 2 stages with evidence
+    stages_with_evidence = sum(1 for s in stages.values() if s["status"] == "found")
+    if stages_with_evidence < 2:
         return None
 
     # Generate Graphviz DOT representation

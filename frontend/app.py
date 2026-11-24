@@ -574,7 +574,7 @@ def api_analyze_repo(repo_path: str):
         res = requests.post(
             f"{API_BASE_URL}/analyze",
             json={"repo_path": repo_path},
-            timeout=180,
+            timeout=200,
         )
         return parse_api_response(res)
     except Exception as e:
@@ -587,7 +587,7 @@ def api_get_report(repo_path: str):
         res = requests.post(
             f"{API_BASE_URL}/report",
             json={"repo_path": repo_path},
-            timeout=180,
+            timeout=200,
         )
         return parse_api_response(res)
     except Exception as e:
@@ -635,7 +635,7 @@ with st.sidebar:
         if not target_repo.strip():
             st.error("Specify a valid repository path.")
         else:
-            with st.spinner("Extracting AST chunks & indexing embeddings..."):
+            with st.spinner("Large repository: audit may take up to 2 minutes"):
                 st.session_state.chat_disabled_reason = None
                 # 1. Index Repo
                 success_idx, idx_data = api_upload_repo(target_repo)
@@ -647,12 +647,14 @@ with st.sidebar:
                     st.session_state.chunks_found = 0
                     st.session_state.chat_disabled_reason = "Repository too large for chat indexing; audit results are available."
                 else:
-                    st.error(idx_data.get("error", "Failed to index repository."))
+                    st.error(idx_data.get("detail") or idx_data.get("error", "Failed to index repository."))
 
                 # 2. Run Static Audit (even if upload-repo was 413)
                 success_audit, audit_data = api_analyze_repo(target_repo)
                 if success_audit:
                     st.session_state.audit_report = audit_data
+                else:
+                    st.error(audit_data.get("detail") or audit_data.get("error", "Audit execution failed."))
 
                 # 3. Generate Report
                 success_rep, rep_data = api_get_report(target_repo)
@@ -963,13 +965,13 @@ with tab_audit:
     if st.session_state.audit_report is None:
         st.markdown('<div class="mono-banner">Run an ML Health Audit from the sidebar to inspect this repository.</div>', unsafe_allow_html=True)
         if st.button("Run Audit Now", type="primary", key="audit_run_now_btn"):
-            with st.spinner("Executing static AST inspection..."):
+            with st.spinner("Large repository: audit may take up to 2 minutes"):
                 success, audit_data = api_analyze_repo(st.session_state.repo_path)
                 if success:
                     st.session_state.audit_report = audit_data
                     st.rerun()
                 else:
-                    st.error("Audit execution failed.")
+                    st.error(audit_data.get("detail") or audit_data.get("error", "Audit execution failed."))
     else:
         report = st.session_state.audit_report
         if report.get("truncated"):
@@ -1085,13 +1087,13 @@ with tab_report:
     if not st.session_state.markdown_report:
         st.markdown('<div class="mono-banner">Generate the ML Health Report to view the document.</div>', unsafe_allow_html=True)
         if st.button("Generate Report", type="primary", key="gen_rep_btn_tab4"):
-            with st.spinner("Compiling report..."):
+            with st.spinner("Large repository: audit may take up to 2 minutes"):
                 success, rep_data = api_get_report(st.session_state.repo_path)
                 if success:
                     st.session_state.markdown_report = rep_data.get("report", "")
                     st.rerun()
                 else:
-                    st.error("Report generation failed.")
+                    st.error(rep_data.get("detail") or rep_data.get("error", "Report generation failed."))
     else:
         col_r1, col_r2 = st.columns([1, 4])
         with col_r1:

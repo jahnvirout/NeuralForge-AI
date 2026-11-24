@@ -29,7 +29,7 @@ from retrieval.retriever import Retriever
 from llm.rag_chain import ask_question
 from evaluation.project_scorer import score_project
 from evaluation.readme_generator import generate_ml_report
-from evaluation.pipeline_reconstructor import reconstruct_repository_pipelines
+from evaluation.pipeline_reconstructor import reconstruct_repository_pipelines, is_training_script
 from evaluation.verified_autofix import generate_all_verified_fixes
 
 app = FastAPI(
@@ -219,32 +219,59 @@ def analyze(request: RepoRequest):
       - Validation and overfitting checks
       - Tree complexity bounding checks
       - Committed dataset file scanning
-      - Reconstructed ML pipeline graphs
-      - Verified auto-fixes
-    Does not reject repos exceeding limit; scans files smallest-first up to budget.
+      - Reconstructed ML pipeline graphs (capped at 10 on training scripts only)
+      - Verified auto-fixes (on training scripts only)
+    Governed by an overall request deadline with granular timing metrics.
     """
+    req_start = time.time()
+    deadline = req_start + MAX_ANALYSIS_SECONDS
     temp_dir = None
     try:
+        t0 = time.time()
         actual_path, temp_dir = resolve_repo_source(request.repo_path)
+        clone_s = round(time.time() - t0, 3)
 
+        rem_for_scan = max(0.0, deadline - time.time())
+        t1 = time.time()
         files, stats = parse_repository(
             actual_path,
             byte_budget=MAX_ANALYZABLE_SOURCE_BYTES,
-            time_budget=MAX_ANALYSIS_SECONDS,
+            time_budget=rem_for_scan,
             return_stats=True,
         )
+        scan_s = round(time.time() - t1, 3)
+
         report = score_project(files, repo_path=actual_path)
 
-        # Phase 3: Pipeline reconstruction and verified auto-fixes
-        pipelines = reconstruct_repository_pipelines(files)
-        verified_fixes = generate_all_verified_fixes(files)
+        # Run pipeline reconstruction and autofix ONLY on training scripts (split + fit)
+        t2 = time.time()
+        pipelines = []
+        verified_fixes = []
+        truncated = stats["truncated"]
+
+        if time.time() < deadline:
+            training_files = [f for f in files if is_training_script(f.get("code", ""))]
+            pipelines = reconstruct_repository_pipelines(training_files)[:10]
+            if time.time() < deadline:
+                verified_fixes = generate_all_verified_fixes(training_files)
+            else:
+                truncated = True
+        else:
+            truncated = True
+
+        pipeline_s = round(time.time() - t2, 3)
 
         report["pipelines"] = pipelines
         report["verified_fixes"] = verified_fixes
-        report["truncated"] = stats["truncated"]
+        report["truncated"] = truncated or (time.time() > deadline)
         report["files_scanned"] = stats["files_scanned"]
         report["files_skipped"] = stats["files_skipped"]
         report["total_files"] = stats["total_files"]
+        report["timing"] = {
+            "clone_s": clone_s,
+            "scan_s": scan_s,
+            "pipeline_s": pipeline_s,
+        }
 
         return report
 
@@ -256,30 +283,45 @@ def analyze(request: RepoRequest):
 @app.post("/report")
 def report(request: RepoRequest):
     """Generates comprehensive Markdown ML project health report without embedding."""
+    req_start = time.time()
+    deadline = req_start + MAX_ANALYSIS_SECONDS
     temp_dir = None
     try:
+        t0 = time.time()
         actual_path, temp_dir = resolve_repo_source(request.repo_path)
+        clone_s = round(time.time() - t0, 3)
 
+        rem_for_scan = max(0.0, deadline - time.time())
+        t1 = time.time()
         files, stats = parse_repository(
             actual_path,
             byte_budget=MAX_ANALYZABLE_SOURCE_BYTES,
-            time_budget=MAX_ANALYSIS_SECONDS,
+            time_budget=rem_for_scan,
             return_stats=True,
         )
+        scan_s = round(time.time() - t1, 3)
+
+        t2 = time.time()
         chunks = []
         for file in files:
             if file.get("language") == "Python":
                 chunks.extend(chunk_python_file(file["code"], file["relative_path"]))
 
         score_report = score_project(files, repo_path=actual_path)
-
         report_text = generate_ml_report(files, chunks, score_report)
+        pipeline_s = round(time.time() - t2, 3)
+
         return {
             "report": report_text,
-            "truncated": stats["truncated"],
+            "truncated": stats["truncated"] or (time.time() > deadline),
             "files_scanned": stats["files_scanned"],
             "files_skipped": stats["files_skipped"],
             "total_files": stats["total_files"],
+            "timing": {
+                "clone_s": clone_s,
+                "scan_s": scan_s,
+                "pipeline_s": pipeline_s,
+            },
         }
 
     finally:
@@ -294,22 +336,39 @@ def report(request: RepoRequest):
 @app.post("/pipeline")
 def get_pipeline(request: RepoRequest):
     """Additive endpoint returning deterministic reconstructed ML pipelines and DOT graphs."""
+    req_start = time.time()
+    deadline = req_start + MAX_ANALYSIS_SECONDS
     temp_dir = None
     try:
+        t0 = time.time()
         actual_path, temp_dir = resolve_repo_source(request.repo_path)
+        clone_s = round(time.time() - t0, 3)
+
+        rem_for_scan = max(0.0, deadline - time.time())
+        t1 = time.time()
         files, stats = parse_repository(
             actual_path,
             byte_budget=MAX_ANALYZABLE_SOURCE_BYTES,
-            time_budget=MAX_ANALYSIS_SECONDS,
+            time_budget=rem_for_scan,
             return_stats=True,
         )
+        scan_s = round(time.time() - t1, 3)
+
+        t2 = time.time()
         pipelines = reconstruct_repository_pipelines(files)
+        pipeline_s = round(time.time() - t2, 3)
+
         return {
             "pipelines": pipelines,
-            "truncated": stats["truncated"],
+            "truncated": stats["truncated"] or (time.time() > deadline),
             "files_scanned": stats["files_scanned"],
             "files_skipped": stats["files_skipped"],
             "total_files": stats["total_files"],
+            "timing": {
+                "clone_s": clone_s,
+                "scan_s": scan_s,
+                "pipeline_s": pipeline_s,
+            },
         }
     finally:
         if temp_dir:
@@ -319,22 +378,39 @@ def get_pipeline(request: RepoRequest):
 @app.post("/autofix")
 def get_autofix(request: RepoRequest):
     """Additive endpoint returning in-memory verified auto-fix diffs for detected leakage."""
+    req_start = time.time()
+    deadline = req_start + MAX_ANALYSIS_SECONDS
     temp_dir = None
     try:
+        t0 = time.time()
         actual_path, temp_dir = resolve_repo_source(request.repo_path)
+        clone_s = round(time.time() - t0, 3)
+
+        rem_for_scan = max(0.0, deadline - time.time())
+        t1 = time.time()
         files, stats = parse_repository(
             actual_path,
             byte_budget=MAX_ANALYZABLE_SOURCE_BYTES,
-            time_budget=MAX_ANALYSIS_SECONDS,
+            time_budget=rem_for_scan,
             return_stats=True,
         )
+        scan_s = round(time.time() - t1, 3)
+
+        t2 = time.time()
         verified_fixes = generate_all_verified_fixes(files)
+        pipeline_s = round(time.time() - t2, 3)
+
         return {
             "verified_fixes": verified_fixes,
-            "truncated": stats["truncated"],
+            "truncated": stats["truncated"] or (time.time() > deadline),
             "files_scanned": stats["files_scanned"],
             "files_skipped": stats["files_skipped"],
             "total_files": stats["total_files"],
+            "timing": {
+                "clone_s": clone_s,
+                "scan_s": scan_s,
+                "pipeline_s": pipeline_s,
+            },
         }
     finally:
         if temp_dir:

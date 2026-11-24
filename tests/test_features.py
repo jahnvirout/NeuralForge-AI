@@ -220,3 +220,56 @@ def test_large_repo_analyze_truncated_and_upload_413(tmp_path, monkeypatch):
     assert "exceeds" in res_upload.json()["detail"].lower()
 
 
+def test_pipeline_load_balancing_loss_not_data_ingestion():
+    from evaluation.pipeline_reconstructor import _is_data_ingestion_call, reconstruct_file_pipeline
+    assert _is_data_ingestion_call("", "load_balancing_loss_func") is False
+    assert _is_data_ingestion_call("model", "load_state_dict") is False
+    assert _is_data_ingestion_call("path", "read_text") is False
+
+    code = """
+loss = load_balancing_loss_func(x)
+state = model.load_state_dict(weights)
+txt = path.read_text()
+"""
+    pipe = reconstruct_file_pipeline(code, "loss_util.py")
+    assert pipe is None
+
+
+def test_pipeline_single_stage_returns_no_pipeline():
+    from evaluation.pipeline_reconstructor import reconstruct_file_pipeline
+    code_ingest_only = """
+import pandas as pd
+df = pd.read_csv("data.csv")
+print(df.shape)
+"""
+    assert reconstruct_file_pipeline(code_ingest_only, "ingest.py") is None
+
+    code_fit_only = """
+model.fit(X, y)
+"""
+    assert reconstruct_file_pipeline(code_fit_only, "train_only.py") is None
+
+
+def test_analyze_on_repo_with_20_non_training_files_returns_zero_pipelines(tmp_path):
+    from fastapi.testclient import TestClient
+    from backend.main import app
+
+    repo_dir = tmp_path / "non_training_repo"
+    repo_dir.mkdir()
+    for i in range(20):
+        (repo_dir / f"module_{i}.py").write_text(f"""
+def process_data_{i}(val):
+    return val * {i}
+""", encoding="utf-8")
+
+    client = TestClient(app)
+    res = client.post("/analyze", json={"repo_path": str(repo_dir)})
+    assert res.status_code == 200
+    data = res.json()
+    assert len(data.get("pipelines", [])) == 0
+    assert "timing" in data
+    assert "clone_s" in data["timing"]
+    assert "scan_s" in data["timing"]
+    assert "pipeline_s" in data["timing"]
+
+
