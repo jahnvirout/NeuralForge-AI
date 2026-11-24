@@ -3,7 +3,7 @@ from pathlib import Path
 from parser.github_ingestion import is_valid_github_url, calculate_analyzable_source_bytes
 from parser.repository_parser import parse_repository, scan_committed_data_files
 from evaluation.pipeline_reconstructor import reconstruct_file_pipeline
-from evaluation.verified_autofix import generate_verified_leakage_fix
+from evaluation.verified_autofix import generate_verified_leakage_fix, validate_fix_variables
 from evaluation.project_scorer import score_project
 
 
@@ -102,7 +102,88 @@ def test_verified_autofix_on_bad_fixture():
     fix = generate_verified_leakage_fix(code, "bad_model.py")
     assert fix is not None
     assert fix["verified"] is True
-    assert fix["status"] == "verified by re-analysis"
+    assert fix["status"].startswith("leakage pattern removed")
     assert "--- a/bad_model.py" in fix["diff"]
     assert "+++ b/bad_model.py" in fix["diff"]
     assert "fit_transform(X_train)" in fix["patched_code"]
+
+
+def test_autofix_2way_split():
+    code = """
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+X_train, X_test = train_test_split(X_scaled, test_size=0.2)
+"""
+    fix = generate_verified_leakage_fix(code, "test_2way.py")
+    assert fix is not None
+    assert fix["verified"] is True
+    assert "train_test_split(X, test_size=0.2)" in fix["patched_code"]
+    assert "X_train = scaler.fit_transform(X_train)" in fix["patched_code"]
+    assert "X_test = scaler.transform(X_test)" in fix["patched_code"]
+    assert fix["status"] == "leakage pattern removed (re-analysis + ast.parse passed); semantic equivalence not guaranteed"
+    assert "semantic equivalence not guaranteed" in fix["explanation"]
+
+
+def test_autofix_4way_split():
+    code = """
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2)
+"""
+    fix = generate_verified_leakage_fix(code, "test_4way.py")
+    assert fix is not None
+    assert fix["verified"] is True
+    assert "train_test_split(X, y, test_size=0.2)" in fix["patched_code"]
+    assert "X_train = scaler.fit_transform(X_train)" in fix["patched_code"]
+    assert "X_test = scaler.transform(X_test)" in fix["patched_code"]
+
+
+def test_autofix_downstream_uses_scaled_data():
+    code = """
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2)
+
+model = LogisticRegression()
+model.fit(X_train, y_train)
+acc = model.score(X_test, y_test)
+"""
+    fix = generate_verified_leakage_fix(code, "pipeline.py")
+    assert fix is not None
+    assert fix["verified"] is True
+    assert "X_train = scaler.fit_transform(X_train)" in fix["patched_code"]
+    assert "X_test = scaler.transform(X_test)" in fix["patched_code"]
+    assert "model.fit(X_train, y_train)" in fix["patched_code"]
+    assert "model.score(X_test, y_test)" in fix["patched_code"]
+    assert "X_scaled" not in fix["patched_code"]
+
+
+def test_autofix_unused_new_variable_rejection():
+    code = """
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+X_train, X_test = train_test_split(X_scaled, y, test_size=0.2)
+
+model = LogisticRegression()
+model.fit(X_train, y_train)
+"""
+    patched_unused = code.replace("X_scaled = scaler.fit_transform(X)", "") + "\nX_new = scaler.fit_transform(X_train)\n"
+    assert validate_fix_variables(patched_unused, assigned_by_fix={"X_new"}, split_vars={"X_train", "X_test"}, fix_end_line=7) is False
+
+    fix = generate_verified_leakage_fix(code, "test.py", _assign_new_vars=True)
+    assert fix is None
+
