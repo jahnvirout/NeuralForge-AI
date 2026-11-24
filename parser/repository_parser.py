@@ -83,12 +83,11 @@ def parse_repository(
     byte_budget: Optional[int] = None,
     time_budget: Optional[float] = None,
     return_stats: bool = False,
-    progress_callback: Optional[Any] = None,
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], Dict[str, Any]]]:
     """
     Parses source code files from a repository in a deterministic order (smallest first),
     skipping ignored directories, deliberate fixtures, and .neuralforgeignore patterns.
-    Stops scanning when byte_budget or time_budget is exceeded and returns partial results.
+    Stops scanning when byte_budget or time_budget (~60s) is exceeded and returns partial results.
     """
     repo = Path(repo_path)
     repository_data: List[Dict[str, Any]] = []
@@ -97,7 +96,6 @@ def parse_repository(
     if not repo.exists():
         stats = {
             "truncated": False,
-            "reason": None,
             "files_scanned": 0,
             "files_skipped": 0,
             "total_files": 0,
@@ -132,24 +130,18 @@ def parse_repository(
     candidates.sort(key=lambda item: (item[0], item[1]))
     total_files = len(candidates)
 
-    if progress_callback and total_files == 0:
-        progress_callback(0, 0)
-
     start_time = time.time()
     scanned_bytes = 0
     files_scanned = 0
     truncated = False
-    reason = None
 
     for size, rel_path, file in candidates:
         if byte_budget is not None and (scanned_bytes + size > byte_budget):
             truncated = True
-            reason = f"Source code size exceeded {byte_budget // (1024 * 1024)}MB limit"
             break
 
         if time_budget is not None and (time.time() - start_time > time_budget):
             truncated = True
-            reason = f"Audit time exceeded {int(time_budget)}s limit"
             break
 
         try:
@@ -174,8 +166,6 @@ def parse_repository(
             )
             scanned_bytes += size
             files_scanned += 1
-            if progress_callback:
-                progress_callback(files_scanned, total_files)
 
         except Exception as e:
             print(f"Error reading {file}: {e}")
@@ -184,12 +174,9 @@ def parse_repository(
     files_skipped = total_files - files_scanned
     if files_skipped > 0 and (byte_budget is not None or time_budget is not None):
         truncated = True
-        if not reason:
-            reason = "File processing limits exceeded"
 
     stats = {
         "truncated": truncated,
-        "reason": reason,
         "files_scanned": files_scanned,
         "files_skipped": files_skipped,
         "total_files": total_files,
