@@ -13,43 +13,47 @@ NeuralForge AI bridges this gap in two ways: by indexing a repository and answer
 ## Features
 
 ### Repository Understanding
-- Recursively walks the repository and recognizes `.py`, `.java`, `.cpp`, `.c`, `.js`, and `.ts` files
-- Skips only the currently hard-coded directories (`venv`, `node_modules`, `.git`, and caches)
-- Skips individual source files larger than approximately 500 KB and handles encoding errors safely
-- Does **not** yet distinguish important project files from redundant data, build artifacts, checkpoints, or other large folders
-- Builds structured repository metadata
+- Recursively walks the repository and recognizes `.py`, `.ipynb`, `.java`, `.cpp`, `.c`, `.js`, and `.ts` files
+- Extracts and analyzes code cells from Jupyter Notebooks (`.ipynb`)
+- Honors repository ignore patterns via `.neuralforgeignore` alongside default exclusions (`venv`, `node_modules`, `.git`, caches)
+- Detects committed data files and model checkpoints (`.csv`, `.parquet`, `.pkl`, `.pt`, `.h5`), warning developers and applying health score deductions
+- Caps individual source file analysis at 500 KB and total analyzable source size at 25 MB
 
 ### Intelligent Code Chunking
-- Python AST-based parsing (not naive text splitting)
-- Function-level and class-level chunking
-- Preserves complete logical code blocks
-- Only Python files are converted into AST chunks for semantic retrieval
+- Python AST-based parsing preserving function-level, class-level, and top-level module blocks
+- Tags class methods with class hierarchy metadata (`parent=ClassName`)
+- Caps total indexed chunks at 500 to keep memory bounded on resource-constrained environments
 
 ### Semantic Search
-- Generates embeddings for code chunks using sentence-transformers (all-MiniLM-L6-v2)
-- Stores embeddings in an in-memory FAISS vector index for the active session
-- Performs similarity search to find relevant code for a given query
+- Generates embeddings in batches using sentence-transformers (all-MiniLM-L6-v2)
+- Stores embeddings in an in-memory FAISS vector index per session
+- Bounded session store with LRU eviction (max 10 sessions) and 1-hour TTL
 
 ### Retrieval-Augmented Generation (RAG)
 - Retrieves relevant code context for a user's question
-- Builds a grounded prompt (explicitly restricts the LLM to the retrieved context, preventing hallucination)
-- Calls Groq (openai/gpt-oss-20b) to generate an answer
-- Answers repository-specific questions and explains functions/classes using only retrieved code
+- Formats explicit citations (file path, function name, and line numbers) for retrieved chunks
+- Guarded retrieval: returns "Insufficient evidence in repository" when similarity falls below confidence threshold
+- Builds a grounded prompt restricting the LLM to retrieved context to prevent hallucination
+- Calls Groq (openai/gpt-oss-20b) to generate answers
 
-### ML Engineer Intelligence (Phase 2)
-- **Data leakage detection** — flags `fit_transform()` called before `train_test_split()`
-- **Overfitting risk analysis** — flags models trained with `.fit()` but never evaluated against a held-out validation/test set
-- **Hyperparameter risk analysis** — flags tree-based models (DecisionTree/RandomForest) initialized without `max_depth`, risking unbounded overfitting
-- **Project scoring** — aggregates all checks into a single weighted score (out of 100) with a detailed issue breakdown
-- **ML Project Health Report generator** — produces a full Markdown report combining chunk stats and all findings, downloadable from the frontend
+### Verified ML Audit and Static Analysis
+- **AST scope-aware data leakage detection** — tracks variable taint across `fit_transform` and `train_test_split` within local scopes, immune to string and comment false positives
+- **AST overfitting risk analysis** — inspects AST `Call` nodes to match estimator `.fit()` invocations against validation/test evaluations or score calls
+- **AST hyperparameter risk analysis** — validates tree-based models (DecisionTree, RandomForest, ExtraTrees, GradientBoosting) for `max_depth`, `min_samples_leaf`, or `max_leaf_nodes` constraints
+- **Explainable project scoring** — transparent score breakdown detailing deductions for leakage (-35), unconstrained trees (-20), unvalidated models (-15), and committed datasets (-10)
+- **ML Pipeline Reconstruction** — analyzes repository ASTs to trace pipeline stages (Data Ingestion -> Preprocessing -> Data Splitting -> Model Training -> Evaluation) and generates Graphviz DOT DAGs
+- **Verified Auto-Fix** — produces deterministic unified diffs to fix detected issues and validates fixes in-memory with AST re-analysis confirming zero remaining issues
+- **ML Project Health Report generator** — generates complete Markdown audit reports combining chunk stats and all findings
 
 ### Backend API (FastAPI)
-The pipeline is exposed as a REST API, not just terminal scripts:
+The pipeline is exposed as a REST API with standardized HTTP status codes (400, 404, 408, 413, 422):
 - `GET /` — backend health check
-- `POST /upload-repo` — parses, chunks, embeds, and indexes a repository
-- `POST /ask` — answers a question grounded in the indexed repository
-- `POST /analyze` — runs Phase 2 checks and returns the score/issue report
+- `POST /upload-repo` — parses, chunks, batch-embeds, and indexes a repository
+- `POST /ask` — answers questions with citations and weak retrieval detection
+- `POST /analyze` — runs lightweight AST static analysis without vector indexing
 - `POST /report` — generates the full Markdown health report
+- `POST /pipeline` — reconstructs ML pipeline stages and returns Graphviz DOT graph
+- `POST /autofix` — generates verified unified diffs to resolve detected audit issues
 - `GET /docs` — interactive FastAPI documentation
 
 ### Frontend (Streamlit)
@@ -105,18 +109,18 @@ Context-Aware Response   Score + Issue Report
 
 ```
 NeuralForge-AI/
-├── parser/          # repository parsing, edge-case handling
-├── chunking/         # AST-based function/class chunking
-├── embeddings/        # embedding generation
-├── vector_db/        # FAISS vector store
-├── retrieval/         # semantic retrieval logic
-├── llm/            # RAG chain, Groq integration
-├── evaluation/         # Phase 2 ML intelligence checks
-├── backend/          # FastAPI app exposing the pipeline as a REST API
-├── frontend/          # Streamlit dashboard
-├── rag/            # end-to-end pipeline entry point (terminal)
-├── tests/            # pytest unit + integration test suite
+├── parser/          # repository parsing, edge-case handling, .ipynb & .neuralforgeignore support
+├── chunking/        # AST-based function, class, and module chunking
+├── embeddings/      # batch embedding generation
+├── vector_db/       # FAISS vector store
+├── retrieval/       # semantic retrieval logic
+├── llm/             # RAG chain, Groq integration, citation formatting
+├── evaluation/      # AST static audit, pipeline reconstructor, verified auto-fix
+├── backend/         # FastAPI REST API with bounded session cache and proper status codes
+├── frontend/        # Streamlit dashboard with DAG pipeline and auto-fix diffs
+├── tests/           # pytest suite (unit tests, AST detectors, feature tests)
 ├── data/            # sample repositories for testing
+├── config.py        # centralized configuration constants
 └── docs/
 ```
 
@@ -175,13 +179,11 @@ or a public GitHub HTTPS URL, for example:
 https://github.com/karpathy/micrograd
 ```
 
-GitHub repositories are cloned with a shallow clone. The current ingestion
-guard rejects a cloned repository larger than 300 MB. This size check is
-performed after cloning and counts the cloned directory, including files that
-the parser will later ignore. The parser then skips only the hard-coded
-directories, unsupported extensions, and individual source files larger than
-approximately 500 KB. It does not yet intelligently remove every redundant
-project folder or select only the repository's "main" files.
+GitHub repositories are cloned using shallow blobless cloning with a 60-second
+timeout and guaranteed directory cleanup. The ingestion guard enforces a 25 MB
+analyzable source limit, rejecting repositories whose meaningful code exceeds
+safe processing bounds. The parser respects `.neuralforgeignore` files to ignore
+project-specific non-code paths and warns on committed data files.
 
 ## Deployment
 
@@ -227,31 +229,33 @@ is used for the API and `/docs`.
 ## Development Status
 
 **Phase 1 — Working RAG Copilot (complete)**
-- Repository parser with edge-case handling
-- AST-based code chunker
-- Embedding generation
+- Repository parser with edge-case handling and `.ipynb` notebook support
+- AST-based function, class, and module code chunker
+- Batch embedding generation
 - FAISS vector store
-- Semantic retriever
-- End-to-end RAG chain with LLM integration
+- Semantic retriever with weak-retrieval guard
+- End-to-end RAG chain with formatted citations and LLM integration
 
-**Phase 2 — ML Engineer Intelligence (complete)**
-- Data leakage detector
-- Overfitting risk analyzer
-- Hyperparameter risk analyzer
-- Project scorer
+**Phase 2 — AST ML Static Analysis and Auditor (complete)**
+- Scope-aware AST data leakage detector (variable taint tracking)
+- Call-node AST overfitting risk analyzer
+- AST hyperparameter risk analyzer with tree constraints
+- Transparent, explainable project scoring rules and score breakdown
+- Committed dataset detection and warning
 - ML Project Health Report generator
 
-**Phase 3 — Product Layer (complete)**
-- FastAPI backend exposing all functionality via REST endpoints
-- Streamlit frontend with chat, health dashboard, report viewer, and repo inspector
+**Phase 3 — Verified Audit and Pipeline Reconstruction (complete)**
+- AST ML pipeline reconstructor (ingest, preprocess, split, train, eval)
+- Pipeline DAG visualization with Graphviz DOT export
+- Verified auto-fix engine generating unified diffs verified by in-memory AST re-analysis
+- Additive REST endpoints: `POST /pipeline` and `POST /autofix`
 
-**Implemented after the initial phases**
-- Public GitHub URL ingestion with shallow cloning and cleanup
-
-**Planned**
-- Source citations in chat answers (show which file/chunk an answer was grounded in)
-- Background indexing jobs and progress reporting for large repositories
-- Persistent vector storage across backend restarts
+**Phase 4 — Robustness and Resource Guardrails (complete)**
+- Smart shallow blobless cloning with 60s timeout and guaranteed cleanup
+- Analyzable source byte budget enforcement (25 MB limit)
+- Bounded in-memory session store (max 10 sessions, 1-hour TTL)
+- Standardized HTTP status codes (400, 404, 408, 413, 422)
+- Centralized `config.py` configuration constants
 
 ## Learning Objectives
 

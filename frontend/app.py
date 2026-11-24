@@ -517,6 +517,9 @@ if "markdown_report" not in st.session_state:
 def parse_api_response(res):
     try:
         data = res.json()
+        if not (200 <= res.status_code < 300):
+            if "detail" in data:
+                data["error"] = data["detail"]
     except ValueError:
         data = {
             "error": f"Backend returned HTTP {res.status_code}: "
@@ -822,6 +825,29 @@ with tab_overview:
                     """,
                     unsafe_allow_html=True,
                 )
+            for item in report.get("committed_dataset_issues", []):
+                st.markdown(
+                    f"""
+                    <div class="issue-row">
+                        <div class="issue-header">
+                            <span class="issue-file-loc">{item.get('file')}</span>
+                            <span class="badge-med">Medium · Committed Data</span>
+                        </div>
+                        <div class="issue-title-text">{item.get('issue')}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+        # Transparent Scoring Rule Breakdown
+        breakdown = report.get("score_breakdown", [])
+        if breakdown:
+            st.markdown("<div style='height: 1.25rem;'></div>", unsafe_allow_html=True)
+            st.markdown("##### Explainable Score Breakdown")
+            for b in breakdown:
+                st.markdown(
+                    f"- **{b['rule']}**: -{b['points_deducted']} pts ({b['issues_count']} issue(s)) — *{b['description']}*"
+                )
 
 
 # ---------------------------------------------------------
@@ -982,6 +1008,43 @@ with tab_audit:
                     """,
                     unsafe_allow_html=True,
                 )
+
+            # Committed Datasets
+            for item in report.get("committed_dataset_issues", []):
+                st.markdown(
+                    f"""
+                    <div class="issue-row">
+                        <div class="issue-header">
+                            <span class="issue-file-loc">{item.get('file')}</span>
+                            <span class="badge-med">Medium · Committed Data</span>
+                        </div>
+                        <div class="issue-title-text">{item.get('issue')}</div>
+                        <div class="issue-remedy-box"><strong>Remediation:</strong> {item.get('suggestion')}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+        # Phase 3 Breakthrough: Reconstructed ML Pipeline Dataflow
+        pipelines = report.get("pipelines", [])
+        if pipelines:
+            st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
+            st.markdown("##### Reconstructed ML Pipeline Dataflow")
+            st.caption("Deterministic pipeline extraction directly from AST call graphs (zero LLM hallucinations).")
+            for pipe in pipelines:
+                st.markdown(f"**Pipeline:** `{pipe['file']}`")
+                st.graphviz_chart(pipe["dot_graph"])
+
+        # Phase 3 Breakthrough: Verified Auto-Fix
+        verified_fixes = report.get("verified_fixes", [])
+        if verified_fixes:
+            st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
+            st.markdown("##### Verified Auto-Fix (Verified by Re-Analysis)")
+            st.caption("Deterministic patches generated and proven by in-memory AST re-analysis with 0 leakage findings.")
+            for fix in verified_fixes:
+                with st.expander(f"Verified Patch for `{fix['file']}` — {fix['status']}"):
+                    st.markdown(f"**Explanation:** {fix['explanation']}")
+                    st.code(fix["diff"], language="diff")
 
 
 # ---------------------------------------------------------

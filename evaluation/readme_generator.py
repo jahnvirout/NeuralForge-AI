@@ -35,6 +35,10 @@ def generate_ml_report(files, chunks, score_report):
         lines.append(f"\n### Hyperparameter Risk ({len(score_report['hyperparameter_issues'])} issue(s))")
         for issue in score_report["hyperparameter_issues"]:
             lines.append(f"- **{issue['file']}**: {issue['issue']}")
+    if score_report.get("committed_dataset_issues"):
+        lines.append(f"\n### Committed Datasets & Binaries ({len(score_report['committed_dataset_issues'])} issue(s))")
+        for issue in score_report["committed_dataset_issues"]:
+            lines.append(f"- **{issue['file']}**: {issue['issue']}")
             lines.append(f"  - *Suggestion:* {issue['suggestion']}")
 
     if score_report["total_issues"] == 0:
