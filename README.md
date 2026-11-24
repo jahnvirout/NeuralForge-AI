@@ -1,266 +1,121 @@
 # NeuralForge AI
 
-AI Copilot for Machine Learning Repositories
+Repository intelligence and static auditing for machine learning projects.
 
-NeuralForge AI is an AI-powered copilot designed to understand machine learning codebases instead of just reading documents. It combines Retrieval-Augmented Generation (RAG), semantic code retrieval, and Large Language Models (LLMs) to answer repository-specific questions, explain code, and help developers navigate ML repositories. On top of that, it reasons like an ML engineer — auditing repositories for common implementation mistakes like data leakage, missing validation, and unconstrained hyperparameters.
+NeuralForge AI does two things for an ML repository:
 
-## Motivation
-
-Modern LLMs answer general programming questions well but lack awareness of an entire codebase. Developers often spend significant time understanding unfamiliar repositories before making changes, and generic AI chatbots can't catch ML-specific engineering mistakes that require domain judgment, not just code-reading.
-
-NeuralForge AI bridges this gap in two ways: by indexing a repository and answering questions grounded in the actual code, and by running static analysis checks that flag real ML engineering pitfalls — turning "chat with your repo" into something closer to an automated ML code review.
+1. **Deterministic audit.** An AST-based analyzer finds data leakage, missing validation, and risky hyperparameters. Every finding has file, function, line range, evidence, and a suggested fix. No LLM is involved in the audit.
+2. **Repository copilot.** A retrieval-augmented chat answers questions about the code, grounded in AST chunks, with citations (file, function, line range). When retrieval is weak, it says "insufficient evidence" instead of guessing.
 
 ## Features
 
-### Repository Understanding
-- Recursively walks the repository and recognizes `.py`, `.java`, `.cpp`, `.c`, `.js`, and `.ts` files
-- Skips only the currently hard-coded directories (`venv`, `node_modules`, `.git`, and caches)
-- Skips individual source files larger than approximately 500 KB and handles encoding errors safely
-- Does **not** yet distinguish important project files from redundant data, build artifacts, checkpoints, or other large folders
-- Builds structured repository metadata
+### Audit (no LLM, no tokens)
 
-### Intelligent Code Chunking
-- Python AST-based parsing (not naive text splitting)
-- Function-level and class-level chunking
-- Preserves complete logical code blocks
-- Only Python files are converted into AST chunks for semantic retrieval
+- **Scope-aware data leakage detection.** Matches real `ast.Call` nodes only, so strings, comments, docstrings, and imports can never trigger a rule. Tracks how data flows through variables inside each function and module scope, and flags preprocessors (scalers, encoders, imputers, PCA, selectors) that are fitted before a train/test split. Pipelines and fits on the training split only are not flagged.
+- **Overfitting and validation checks.** Detects models trained without any held-out evaluation.
+- **Hyperparameter checks.** Detects tree models created without depth or leaf constraints.
+- **Explainable health score.** The score is a visible list of rule, points deducted, and maximum deduction. There are no hidden weights.
+- **Pipeline reconstruction.** Rebuilds each training script's pipeline (data load, preprocessing, split, fit, evaluate) from the AST, with file and line evidence per stage. Stages with no evidence are shown as "insufficient evidence". Rendered as a graph in the UI.
+- **Verified auto-fix.** For each leakage finding, generates a minimal unified diff deterministically (split first, then fit on the training split and transform the test split). The patched code is re-analyzed in memory, and the fix is shown only if the finding disappears and the code still parses. Repository code is never executed.
+- **Committed dataset detection.** Reports data and binary files committed to the repository (csv, parquet, pkl, h5, zip, images) with their sizes.
+- **Notebook support.** Extracts code cells from `.ipynb` files.
+- **Ignore rules.** Skips `tests/fixtures` and honors an optional `.neuralforgeignore` file.
 
-### Semantic Search
-- Generates embeddings for code chunks using sentence-transformers (all-MiniLM-L6-v2)
-- Stores embeddings in an in-memory FAISS vector index for the active session
-- Performs similarity search to find relevant code for a given query
+### Copilot
 
-### Retrieval-Augmented Generation (RAG)
-- Retrieves relevant code context for a user's question
-- Builds a grounded prompt (explicitly restricts the LLM to the retrieved context, preventing hallucination)
-- Calls Groq (openai/gpt-oss-20b) to generate an answer
-- Answers repository-specific questions and explains functions/classes using only retrieved code
-
-### ML Engineer Intelligence (Phase 2)
-- **Data leakage detection** — flags `fit_transform()` called before `train_test_split()`
-- **Overfitting risk analysis** — flags models trained with `.fit()` but never evaluated against a held-out validation/test set
-- **Hyperparameter risk analysis** — flags tree-based models (DecisionTree/RandomForest) initialized without `max_depth`, risking unbounded overfitting
-- **Project scoring** — aggregates all checks into a single weighted score (out of 100) with a detailed issue breakdown
-- **ML Project Health Report generator** — produces a full Markdown report combining chunk stats and all findings, downloadable from the frontend
-
-### Backend API (FastAPI)
-The pipeline is exposed as a REST API, not just terminal scripts:
-- `GET /` — backend health check
-- `POST /upload-repo` — parses, chunks, embeds, and indexes a repository
-- `POST /ask` — answers a question grounded in the indexed repository
-- `POST /analyze` — runs Phase 2 checks and returns the score/issue report
-- `POST /report` — generates the full Markdown health report
-- `GET /docs` — interactive FastAPI documentation
-
-### Frontend (Streamlit)
-A clean, minimal dashboard with five tabs:
-- **Overview** — repository health and executive summary
-- **Copilot Q&A** — chat interface for asking questions about the codebase
-- **ML Health Dashboard** — visual score and itemized issue breakdown
-- **Full ML Report** — rendered report with one-click Markdown download
-- **Architecture** — pipeline architecture and live session telemetry
+- AST-aware chunking: function chunks, module-level chunks for top-level logic, and method chunks tagged with their parent class.
+- Dense retrieval with sentence-transformers embeddings and a FAISS index.
+- Citations from chunk metadata, and an explicit "insufficient evidence" answer when retrieval is weak.
+- Bounded in-memory sessions (LRU eviction and TTL).
 
 ## Architecture
 
 ```
-Repository
-    |
-Repository Parser
-    |
-AST-Based Chunking
-    |
-Embedding Generation
-    |
-FAISS Vector Database
-    |
-Retriever
-    |
-LLM (Groq) ---- ML Intelligence Checks (Phase 2)
-    |                    |
-Context-Aware Response   Score + Issue Report
-    |                    |
-     +--------------------+
-             |
-      FastAPI Backend
-      (in-memory sessions)
-             |
-      Streamlit Frontend
+Streamlit UI (frontend/app.py)
+        |
+        v
+FastAPI backend (backend/main.py)
+        |
+        +-- parser/        clone (shallow, sparse), ignore rules, file parsing
+        +-- chunking/      AST chunker
+        +-- embeddings/    sentence-transformers
+        +-- llm/           RAG chain, citations, weak-retrieval check
+        +-- evaluation/    detectors, scorer, pipeline reconstructor, verified autofix
+        +-- config.py      limits, ignored directories, supported extensions
 ```
 
-## Tech Stack
+## API
 
-**Core:** Python, AST, pathlib
+| Endpoint | Purpose |
+|---|---|
+| `POST /upload-repo` | Index a repository for chat (embeddings and FAISS). Returns 413 if the repository is too large to index. |
+| `POST /ask` | Ask a question about an indexed repository. Returns an answer with citations. |
+| `POST /analyze` | Run the deterministic audit. Works on large repositories and may return partial results. |
+| `POST /report` | Generate the full project report. |
+| `POST /pipeline` | Return reconstructed ML pipelines and graph definitions. |
+| `POST /autofix` | Return verified leakage fixes. |
 
-**ML/AI:** sentence-transformers, Hugging Face, FAISS
+Errors use proper HTTP status codes (400, 404, 408, 413, 422) with a `detail` message.
 
-**RAG/LLM:** LangChain, Groq API
-
-**Backend:** FastAPI, uvicorn
-
-**Frontend:** Streamlit
-
-**Testing:** pytest (unit tests for parser/chunker, integration tests for live API endpoints)
-
-## Project Structure
-
-```
-NeuralForge-AI/
-├── parser/          # repository parsing, edge-case handling
-├── chunking/         # AST-based function/class chunking
-├── embeddings/        # embedding generation
-├── vector_db/        # FAISS vector store
-├── retrieval/         # semantic retrieval logic
-├── llm/            # RAG chain, Groq integration
-├── evaluation/         # Phase 2 ML intelligence checks
-├── backend/          # FastAPI app exposing the pipeline as a REST API
-├── frontend/          # Streamlit dashboard
-├── rag/            # end-to-end pipeline entry point (terminal)
-├── tests/            # pytest unit + integration test suite
-├── data/            # sample repositories for testing
-└── docs/
-```
+Audit responses include `truncated`, `files_scanned`, `files_skipped`, `total_files`, and a `timing` breakdown, so partial results are always labeled.
 
 ## Setup
 
-```bash
-git clone https://github.com/<your-username>/NeuralForge-AI.git
+Requirements: Python 3.11 or newer.
+
+```
+git clone https://github.com/jahnvirout/NeuralForge-AI.git
 cd NeuralForge-AI
-python -m venv venv
-.\venv\Scripts\Activate.ps1       # Windows PowerShell
 python -m pip install -r requirements.txt
 ```
 
-The project is developed and tested with Python 3.13.6. If PowerShell blocks
-the activation script, run the project with the Python executable from your
-virtual environment instead.
+Create a `.env` file in the project root with your Groq API key. Never commit this file.
 
-Create a `.env` file in the project root:
 ```
 GROQ_API_KEY=your_key_here
 ```
 
-**Run the full app (backend + frontend):**
+## Run
 
-Terminal 1:
-```bash
-python -m uvicorn backend.main:app --reload --port 8000
+Start the backend:
+
+```
+python -m uvicorn backend.main:app --port 8000
 ```
 
-Terminal 2:
-```bash
+In a second terminal, start the frontend:
+
+```
 python -m streamlit run frontend/app.py
 ```
 
-Open `http://localhost:8501` in your browser.
+The frontend reads the backend address from the `BACKEND_API_URL` environment variable and defaults to `http://127.0.0.1:8000`.
 
-**Or run the terminal-only end-to-end pipeline:**
-```bash
-python -m rag.test_end_to_end
+## Tests
+
+```
+python -m pytest tests/ --ignore=tests/test_live_system.py
 ```
 
-**Run the test suite:**
-```bash
-pytest tests/
-```
+`tests/test_live_system.py` needs running servers and is skipped by default.
 
-When running locally, the frontend uses `http://127.0.0.1:8000` by default.
-For a deployed frontend, set `BACKEND_API_URL` to the public backend URL.
+The suite covers each detector (true positive, true negative, string and comment false positive, cross-function scope), a regression test that the repository's own `evaluation/` folder produces zero findings, pipeline reconstruction, verified auto-fix, and the large-repository response behavior. Deliberately bad sample code lives in `tests/fixtures/`.
 
-## GitHub Repositories
+## Large repositories
 
-`/upload-repo`, `/analyze`, and `/report` accept either a local repository path
-or a public GitHub HTTPS URL, for example:
+- Cloning is shallow and sparse, so large blobs such as committed virtual environments are not downloaded.
+- The audit runs file by file under a time and size budget. If a limit is hit, the response sets `truncated: true` and reports how many files were scanned and skipped.
+- Chat indexing has a lower limit than the audit. For repositories above it, `/upload-repo` returns 413, and the audit endpoints still work.
 
-```text
-https://github.com/karpathy/micrograd
-```
+## Limitations
 
-GitHub repositories are cloned with a shallow clone. The current ingestion
-guard rejects a cloned repository larger than 300 MB. This size check is
-performed after cloning and counts the cloned directory, including files that
-the parser will later ignore. The parser then skips only the hard-coded
-directories, unsupported extensions, and individual source files larger than
-approximately 500 KB. It does not yet intelligently remove every redundant
-project folder or select only the repository's "main" files.
+- Analysis is per file and per scope. Data flows across modules are not traced.
+- On very large repositories the audit can be partial. This is reported, never hidden.
+- Repository chat is unavailable when a repository is too large for in-memory embedding on a 512 MB host.
+- The validation-gap rule treats `.fit()` calls broadly, so it can flag non-sklearn objects such as cloud training estimators.
+- Verified fixes confirm that the flagged pattern is gone and the code still parses. They do not guarantee identical behavior.
+- Chat answers come from an LLM and depend on what retrieval returns. The audit does not use an LLM.
 
-## Deployment
+## Tech stack
 
-The application is deployed as two Render Web Services: a FastAPI backend and
-a Streamlit frontend.
-
-### Backend service
-
-- **Build command:** `pip install -r requirements.txt`
-- **Start command:** `uvicorn backend.main:app --host 0.0.0.0 --port $PORT`
-- **Health check path:** `/`
-- **Environment variables:** `GROQ_API_KEY`, `PYTHON_VERSION=3.13.6`
-
-### Frontend service
-
-- **Root directory:** `frontend`
-- **Build command:** `pip install -r requirements.txt`
-- **Start command:** `streamlit run app.py --server.address 0.0.0.0 --server.port $PORT`
-- **Environment variable:** `BACKEND_API_URL=<public-backend-url>`
-
-Keep `GROQ_API_KEY` on the backend only; it must not be exposed to the
-frontend. The frontend URL is the user-facing website, while the backend URL
-is used for the API and `/docs`.
-
-## Current Limitations
-
-- FAISS indexes and retriever sessions are stored in memory; they reset when
-  the backend restarts or sleeps.
-- Repository indexing is synchronous, so large repositories can exceed request
-  timeouts or available memory.
-- The repository-size check happens before parsing and currently counts
-  redundant files too, so a repository can be rejected even when its useful
-  source code would be much smaller.
-- Filtering is basic, not relevance-aware: datasets, checkpoints, build
-  outputs, and other project-specific noise are not automatically excluded
-  unless they fall under the existing hard-coded rules.
-- The `sentence-transformers` model, PyTorch, and FAISS are memory-intensive;
-  small Render instances may restart while indexing larger repositories.
-- The current implementation is designed for bounded code repositories, not
-  unlimited 1 GB+ ingestion. Intelligent file filtering, background jobs,
-  incremental indexing, and persistent vector storage are future work.
-
-## Development Status
-
-**Phase 1 — Working RAG Copilot (complete)**
-- Repository parser with edge-case handling
-- AST-based code chunker
-- Embedding generation
-- FAISS vector store
-- Semantic retriever
-- End-to-end RAG chain with LLM integration
-
-**Phase 2 — ML Engineer Intelligence (complete)**
-- Data leakage detector
-- Overfitting risk analyzer
-- Hyperparameter risk analyzer
-- Project scorer
-- ML Project Health Report generator
-
-**Phase 3 — Product Layer (complete)**
-- FastAPI backend exposing all functionality via REST endpoints
-- Streamlit frontend with chat, health dashboard, report viewer, and repo inspector
-
-**Implemented after the initial phases**
-- Public GitHub URL ingestion with shallow cloning and cleanup
-
-**Planned**
-- Source citations in chat answers (show which file/chunk an answer was grounded in)
-- Background indexing jobs and progress reporting for large repositories
-- Persistent vector storage across backend restarts
-
-## Learning Objectives
-
-This project explores practical implementation of:
-- Retrieval-Augmented Generation (RAG)
-- Abstract Syntax Trees (AST) for code understanding
-- Semantic code chunking
-- Embedding models and vector search
-- Prompt engineering for grounded, non-hallucinated responses
-- ML-specific static analysis (data leakage, overfitting risk, hyperparameter risk detection)
-- Building and exposing an ML pipeline as a REST API
-- Building a usable frontend on top of a multi-stage AI pipeline
+Python, FastAPI, Streamlit, sentence-transformers (all-MiniLM-L6-v2), FAISS, LangChain, Groq API, pytest.
