@@ -3,7 +3,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Tuple
+from typing import Optional, Tuple
 
 from parser.repository_parser import SUPPORTED_EXTENSIONS, _is_ignored, _load_ignore_patterns
 
@@ -53,7 +53,11 @@ def calculate_analyzable_source_bytes(folder_path: str) -> int:
     return total_bytes
 
 
-def clone_github_repo(github_url: str, timeout_seconds: int = DEFAULT_CLONE_TIMEOUT) -> str:
+def clone_github_repo(
+    github_url: str,
+    timeout_seconds: int = DEFAULT_CLONE_TIMEOUT,
+    target_dir: Optional[str] = None,
+) -> str:
     """
     Performs smart, resource-efficient shallow cloning of a public GitHub repository.
     Uses blobless filter (--filter=blob:none) and sparse-checkout to exclude heavy
@@ -64,7 +68,11 @@ def clone_github_repo(github_url: str, timeout_seconds: int = DEFAULT_CLONE_TIME
     if not is_valid_github_url(github_url):
         raise ValueError(f"Invalid GitHub repository URL: {github_url}")
 
-    temp_dir = tempfile.mkdtemp(prefix="neuralforge_")
+    if target_dir:
+        temp_dir = str(Path(target_dir).resolve())
+        Path(temp_dir).mkdir(parents=True, exist_ok=True)
+    else:
+        temp_dir = tempfile.mkdtemp(prefix="neuralforge_")
 
     try:
         # Step 1: Shallow blobless clone without initial checkout
@@ -133,7 +141,11 @@ def clone_github_repo(github_url: str, timeout_seconds: int = DEFAULT_CLONE_TIME
         # Fallback to standard shallow depth=1 clone if sparse-checkout is unsupported
         try:
             shutil.rmtree(temp_dir, ignore_errors=True)
-            temp_dir = tempfile.mkdtemp(prefix="neuralforge_")
+            if target_dir:
+                temp_dir = str(Path(target_dir).resolve())
+                Path(temp_dir).mkdir(parents=True, exist_ok=True)
+            else:
+                temp_dir = tempfile.mkdtemp(prefix="neuralforge_")
             subprocess.run(
                 ["git", "clone", "--depth", "1", github_url, temp_dir],
                 check=True,
