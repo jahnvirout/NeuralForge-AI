@@ -509,6 +509,8 @@ if "audit_report" not in st.session_state:
     st.session_state.audit_report = None
 if "markdown_report" not in st.session_state:
     st.session_state.markdown_report = None
+if "chat_disabled_reason" not in st.session_state:
+    st.session_state.chat_disabled_reason = None
 
 
 # ---------------------------------------------------------
@@ -526,6 +528,7 @@ def parse_api_response(res):
                      f"{res.text[:300] or 'empty response'}"
         }
 
+    data["status_code"] = res.status_code
     return 200 <= res.status_code < 300, data
 
 def check_backend_health():
@@ -633,26 +636,34 @@ with st.sidebar:
             st.error("Specify a valid repository path.")
         else:
             with st.spinner("Extracting AST chunks & indexing embeddings..."):
+                st.session_state.chat_disabled_reason = None
                 # 1. Index Repo
                 success_idx, idx_data = api_upload_repo(target_repo)
                 if success_idx and "session_id" in idx_data:
                     st.session_state.session_id = idx_data["session_id"]
                     st.session_state.chunks_found = idx_data.get("chunks_found", 0)
-
-                    # 2. Run Static Audit
-                    success_audit, audit_data = api_analyze_repo(target_repo)
-                    if success_audit:
-                        st.session_state.audit_report = audit_data
-
-                    # 3. Generate Report
-                    success_rep, rep_data = api_get_report(target_repo)
-                    if success_rep:
-                        st.session_state.markdown_report = rep_data.get("report", "")
-
-                    st.success(f"Analysis complete: {idx_data.get('chunks_found', 0)} AST chunks indexed.")
-                    st.rerun()
+                elif idx_data.get("status_code") == 413 or "413" in str(idx_data.get("error", "")) or "exceeds" in str(idx_data.get("error", "")).lower():
+                    st.session_state.session_id = None
+                    st.session_state.chunks_found = 0
+                    st.session_state.chat_disabled_reason = "Repository too large for chat indexing; audit results are available."
                 else:
                     st.error(idx_data.get("error", "Failed to index repository."))
+
+                # 2. Run Static Audit (even if upload-repo was 413)
+                success_audit, audit_data = api_analyze_repo(target_repo)
+                if success_audit:
+                    st.session_state.audit_report = audit_data
+
+                # 3. Generate Report
+                success_rep, rep_data = api_get_report(target_repo)
+                if success_rep:
+                    st.session_state.markdown_report = rep_data.get("report", "")
+
+                if st.session_state.chat_disabled_reason:
+                    st.warning(st.session_state.chat_disabled_reason)
+                elif success_idx:
+                    st.success(f"Analysis complete: {idx_data.get('chunks_found', 0)} AST chunks indexed.")
+                st.rerun()
 
     st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
 
@@ -738,6 +749,10 @@ with tab_overview:
         )
     else:
         report = st.session_state.audit_report
+        if report.get("truncated"):
+            scanned = report.get("files_scanned", 0)
+            total = report.get("total_files", scanned)
+            st.warning(f"Partial audit: {scanned} of {total} files scanned")
         score = report.get("overall_score", 0)
         total_issues = report.get("total_issues", 0)
         leakage = report.get("data_leakage_issues", [])
@@ -860,6 +875,9 @@ with tab_copilot:
         unsafe_allow_html=True,
     )
 
+    if st.session_state.get("chat_disabled_reason"):
+        st.warning(st.session_state.chat_disabled_reason)
+
     # Prompt Suggestion Chips (Dispatches to pending_query)
     col_q1, col_q2, col_q3, col_q4 = st.columns(4)
     with col_q1:
@@ -886,7 +904,10 @@ with tab_copilot:
         active_query = st.session_state.pending_query
         st.session_state.pending_query = None  # Consume query immediately
 
-        if not st.session_state.session_id:
+        if st.session_state.get("chat_disabled_reason"):
+            st.session_state.chat_history.append({"role": "user", "content": active_query})
+            st.session_state.chat_history.append({"role": "assistant", "content": st.session_state.chat_disabled_reason})
+        elif not st.session_state.session_id:
             st.session_state.chat_history.append({"role": "user", "content": active_query})
             st.session_state.chat_history.append({"role": "assistant", "content": "Please index a repository first using the **Analyze Repository** button in the sidebar."})
         else:
@@ -951,6 +972,10 @@ with tab_audit:
                     st.error("Audit execution failed.")
     else:
         report = st.session_state.audit_report
+        if report.get("truncated"):
+            scanned = report.get("files_scanned", 0)
+            total = report.get("total_files", scanned)
+            st.warning(f"Partial audit: {scanned} of {total} files scanned")
         total_issues = report.get("total_issues", 0)
         leakage = report.get("data_leakage_issues", [])
         overfitting = report.get("overfitting_risk_issues", [])

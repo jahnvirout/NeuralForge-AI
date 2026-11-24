@@ -9,13 +9,20 @@ from pydantic import BaseModel
 from config import (
     EMBEDDING_BATCH_SIZE,
     MAX_ANALYSIS_SECONDS,
+    MAX_ANALYZABLE_SOURCE_BYTES,
     MAX_INDEX_CHUNKS,
     MAX_SESSIONS,
     SESSION_TTL_SECONDS,
 )
 from parser.repository_parser import parse_repository
 from parser.repo_chunker import chunk_repository
-from parser.github_ingestion import clone_github_repo, cleanup_repo, is_valid_github_url
+from parser.github_ingestion import (
+    clone_github_repo,
+    cleanup_repo,
+    is_valid_github_url,
+    calculate_analyzable_source_bytes,
+)
+from chunking.python_chunker import chunk_python_file
 from embeddings.embedder import embed_chunks
 from vector_db.vector_store import VectorStore
 from retrieval.retriever import Retriever
@@ -133,11 +140,21 @@ def is_indexable_chunk(chunk: Dict[str, Any]) -> bool:
 def upload_repo(request: RepoRequest):
     """
     Indexes repository chunks into FAISS vector store for grounded RAG chat.
+    Enforces 50MB limit for chat indexing (returns 413).
     Caps chunk count and embeds in batches to stay within Render's 512MB RAM limit.
     """
     temp_dir = None
     try:
         actual_path, temp_dir = resolve_repo_source(request.repo_path)
+
+        # Enforce 50MB limit only for /upload-repo (chat indexing)
+        analyzable_bytes = calculate_analyzable_source_bytes(actual_path)
+        if analyzable_bytes > MAX_ANALYZABLE_SOURCE_BYTES:
+            size_mb = analyzable_bytes / (1024 * 1024)
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"Repository analyzable source size ({size_mb:.1f}MB) exceeds 50MB limit for chat indexing. Audit results are still available.",
+            )
 
         raw_chunks = chunk_repository(actual_path)
         # Filter test/vendor code to focus on core logic
@@ -204,14 +221,18 @@ def analyze(request: RepoRequest):
       - Committed dataset file scanning
       - Reconstructed ML pipeline graphs
       - Verified auto-fixes
-    Never runs expensive vector embedding.
+    Does not reject repos exceeding limit; scans files smallest-first up to budget.
     """
     temp_dir = None
-    start_time = time.time()
     try:
         actual_path, temp_dir = resolve_repo_source(request.repo_path)
 
-        files = parse_repository(actual_path)
+        files, stats = parse_repository(
+            actual_path,
+            byte_budget=MAX_ANALYZABLE_SOURCE_BYTES,
+            time_budget=MAX_ANALYSIS_SECONDS,
+            return_stats=True,
+        )
         report = score_project(files, repo_path=actual_path)
 
         # Phase 3: Pipeline reconstruction and verified auto-fixes
@@ -220,7 +241,10 @@ def analyze(request: RepoRequest):
 
         report["pipelines"] = pipelines
         report["verified_fixes"] = verified_fixes
-        report["truncated"] = (time.time() - start_time) > MAX_ANALYSIS_SECONDS
+        report["truncated"] = stats["truncated"]
+        report["files_scanned"] = stats["files_scanned"]
+        report["files_skipped"] = stats["files_skipped"]
+        report["total_files"] = stats["total_files"]
 
         return report
 
@@ -236,12 +260,27 @@ def report(request: RepoRequest):
     try:
         actual_path, temp_dir = resolve_repo_source(request.repo_path)
 
-        files = parse_repository(actual_path)
-        chunks = chunk_repository(actual_path)
+        files, stats = parse_repository(
+            actual_path,
+            byte_budget=MAX_ANALYZABLE_SOURCE_BYTES,
+            time_budget=MAX_ANALYSIS_SECONDS,
+            return_stats=True,
+        )
+        chunks = []
+        for file in files:
+            if file.get("language") == "Python":
+                chunks.extend(chunk_python_file(file["code"], file["relative_path"]))
+
         score_report = score_project(files, repo_path=actual_path)
 
         report_text = generate_ml_report(files, chunks, score_report)
-        return {"report": report_text}
+        return {
+            "report": report_text,
+            "truncated": stats["truncated"],
+            "files_scanned": stats["files_scanned"],
+            "files_skipped": stats["files_skipped"],
+            "total_files": stats["total_files"],
+        }
 
     finally:
         if temp_dir:
@@ -258,9 +297,20 @@ def get_pipeline(request: RepoRequest):
     temp_dir = None
     try:
         actual_path, temp_dir = resolve_repo_source(request.repo_path)
-        files = parse_repository(actual_path)
+        files, stats = parse_repository(
+            actual_path,
+            byte_budget=MAX_ANALYZABLE_SOURCE_BYTES,
+            time_budget=MAX_ANALYSIS_SECONDS,
+            return_stats=True,
+        )
         pipelines = reconstruct_repository_pipelines(files)
-        return {"pipelines": pipelines}
+        return {
+            "pipelines": pipelines,
+            "truncated": stats["truncated"],
+            "files_scanned": stats["files_scanned"],
+            "files_skipped": stats["files_skipped"],
+            "total_files": stats["total_files"],
+        }
     finally:
         if temp_dir:
             cleanup_repo(temp_dir)
@@ -272,9 +322,20 @@ def get_autofix(request: RepoRequest):
     temp_dir = None
     try:
         actual_path, temp_dir = resolve_repo_source(request.repo_path)
-        files = parse_repository(actual_path)
+        files, stats = parse_repository(
+            actual_path,
+            byte_budget=MAX_ANALYZABLE_SOURCE_BYTES,
+            time_budget=MAX_ANALYSIS_SECONDS,
+            return_stats=True,
+        )
         verified_fixes = generate_all_verified_fixes(files)
-        return {"verified_fixes": verified_fixes}
+        return {
+            "verified_fixes": verified_fixes,
+            "truncated": stats["truncated"],
+            "files_scanned": stats["files_scanned"],
+            "files_skipped": stats["files_skipped"],
+            "total_files": stats["total_files"],
+        }
     finally:
         if temp_dir:
             cleanup_repo(temp_dir)

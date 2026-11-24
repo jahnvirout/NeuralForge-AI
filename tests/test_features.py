@@ -187,3 +187,36 @@ model.fit(X_train, y_train)
     fix = generate_verified_leakage_fix(code, "test.py", _assign_new_vars=True)
     assert fix is None
 
+
+def test_large_repo_analyze_truncated_and_upload_413(tmp_path, monkeypatch):
+    import config
+    import backend.main
+    from fastapi.testclient import TestClient
+    from backend.main import app
+
+    repo_dir = tmp_path / "large_repo"
+    repo_dir.mkdir()
+    (repo_dir / "a.py").write_text("x = 1\n", encoding="utf-8")
+    (repo_dir / "b.py").write_text("y = 2\n" * 50, encoding="utf-8")
+    (repo_dir / "c.py").write_text("z = 3\n" * 100, encoding="utf-8")
+
+    monkeypatch.setattr(config, "MAX_ANALYZABLE_SOURCE_BYTES", 50)
+    monkeypatch.setattr(backend.main, "MAX_ANALYZABLE_SOURCE_BYTES", 50)
+
+    client = TestClient(app)
+
+    # /analyze returns 200 with truncated=True, not 413
+    res_analyze = client.post("/analyze", json={"repo_path": str(repo_dir)})
+    assert res_analyze.status_code == 200
+    data_analyze = res_analyze.json()
+    assert data_analyze["truncated"] is True
+    assert data_analyze["files_scanned"] >= 1
+    assert data_analyze["files_skipped"] >= 1
+    assert data_analyze["total_files"] == 3
+
+    # /upload-repo still returns 413
+    res_upload = client.post("/upload-repo", json={"repo_path": str(repo_dir)})
+    assert res_upload.status_code == 413
+    assert "exceeds" in res_upload.json()["detail"].lower()
+
+

@@ -148,16 +148,6 @@ def clone_github_repo(github_url: str, timeout_seconds: int = DEFAULT_CLONE_TIME
             shutil.rmtree(temp_dir, ignore_errors=True)
             raise ValueError(f"Failed to clone repository: {e}")
 
-    # Check analyzable source bytes after ignore filtering
-    analyzable_bytes = calculate_analyzable_source_bytes(temp_dir)
-    if analyzable_bytes > MAX_ANALYZABLE_SOURCE_BYTES:
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        size_mb = analyzable_bytes / (1024 * 1024)
-        max_mb = MAX_ANALYZABLE_SOURCE_BYTES / (1024 * 1024)
-        raise ValueError(
-            f"Repository analyzable source size ({size_mb:.1f}MB) exceeds limit of {max_mb:.0f}MB."
-        )
-
     return temp_dir
 
 

@@ -1,7 +1,8 @@
 import fnmatch
 import json
+import time
 from pathlib import Path
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 
 SUPPORTED_EXTENSIONS = {
@@ -77,19 +78,33 @@ def _extract_ipynb_code(raw_json: str) -> str:
         return ""
 
 
-def parse_repository(repo_path: str) -> List[Dict[str, Any]]:
+def parse_repository(
+    repo_path: str,
+    byte_budget: Optional[int] = None,
+    time_budget: Optional[float] = None,
+    return_stats: bool = False,
+) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], Dict[str, Any]]]:
     """
-    Parses source code files from a repository, skipping ignored directories,
-    deliberate fixtures, and patterns defined in an optional .neuralforgeignore.
-    Supports Python, Jupyter Notebooks (.ipynb code cells), and common source formats.
+    Parses source code files from a repository in a deterministic order (smallest first),
+    skipping ignored directories, deliberate fixtures, and .neuralforgeignore patterns.
+    Stops scanning when byte_budget or time_budget (~60s) is exceeded and returns partial results.
     """
     repo = Path(repo_path)
     repository_data: List[Dict[str, Any]] = []
     ignore_patterns = _load_ignore_patterns(repo)
 
     if not repo.exists():
-        return repository_data
+        stats = {
+            "truncated": False,
+            "files_scanned": 0,
+            "files_skipped": 0,
+            "total_files": 0,
+            "scanned_bytes": 0,
+        }
+        return (repository_data, stats) if return_stats else repository_data
 
+    # Collect candidate files
+    candidates: List[Tuple[int, str, Path]] = []
     for file in repo.rglob("*"):
         if not file.is_file():
             continue
@@ -105,8 +120,29 @@ def parse_repository(repo_path: str) -> List[Dict[str, Any]]:
         if file.suffix not in SUPPORTED_EXTENSIONS:
             continue
 
-        if file.stat().st_size > MAX_FILE_SIZE:
+        size = file.stat().st_size
+        if size > MAX_FILE_SIZE:
             continue
+
+        candidates.append((size, rel_path, file))
+
+    # Deterministic order: smallest first, tie-break by relative path
+    candidates.sort(key=lambda item: (item[0], item[1]))
+    total_files = len(candidates)
+
+    start_time = time.time()
+    scanned_bytes = 0
+    files_scanned = 0
+    truncated = False
+
+    for size, rel_path, file in candidates:
+        if byte_budget is not None and (scanned_bytes + size > byte_budget):
+            truncated = True
+            break
+
+        if time_budget is not None and (time.time() - start_time > time_budget):
+            truncated = True
+            break
 
         try:
             with open(file, "r", encoding="utf-8", errors="replace") as f:
@@ -125,14 +161,30 @@ def parse_repository(repo_path: str) -> List[Dict[str, Any]]:
                     "relative_path": rel_path,
                     "language": SUPPORTED_EXTENSIONS[file.suffix],
                     "code": code,
-                    "size_bytes": file.stat().st_size,
+                    "size_bytes": size,
                 }
             )
+            scanned_bytes += size
+            files_scanned += 1
 
         except Exception as e:
             print(f"Error reading {file}: {e}")
             continue
 
+    files_skipped = total_files - files_scanned
+    if files_skipped > 0 and (byte_budget is not None or time_budget is not None):
+        truncated = True
+
+    stats = {
+        "truncated": truncated,
+        "files_scanned": files_scanned,
+        "files_skipped": files_skipped,
+        "total_files": total_files,
+        "scanned_bytes": scanned_bytes,
+    }
+
+    if return_stats:
+        return repository_data, stats
     return repository_data
 
 
